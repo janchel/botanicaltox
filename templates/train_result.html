@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Training Results — Drug AI{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+    <a href="{{ url_for('train') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Train Another
+    </a>
+</div>
+
+<h2 class="fw-bold mb-1">
+    <i class="bi bi-check-circle-fill text-success"></i> Training Complete — {{ tasks | join(' & ') }}
+</h2>
+{% if overwritten %}
+<div class="alert alert-warning py-2 mb-3">
+    <i class="bi bi-exclamation-triangle"></i>
+    <strong>"{{ model_name | replace('_', ' ') | title }}" was overwritten.</strong>
+</div>
+{% endif %}
+<p class="text-muted">
+    {{ n_samples }} compounds &middot; {{ n_features }} descriptors
+    {% if tune %}&middot; <span class="badge bg-warning text-dark">Tuned</span>{% endif %}
+</p>
+
+<!-- Dataset Preview -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-database"></i> Training Dataset — {{ model_name | replace('_', ' ') | title }}</span>
+        <span class="badge bg-info">{{ n_samples }} compounds</span>
+    </div>
+    <div class="card-body p-0" style="overflow-x:auto;">
+        <table class="table table-sm table-striped mb-0 small">
+            <thead class="table-light"><tr>{% for col in dataset_columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in dataset_preview %}<tr>{% for col in dataset_columns %}<td>{% if 'Label' in col %}<span class="badge {% if row[col] == 1 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">{{ row[col] }}</span>{% elif col == 'Smiles' or col == 'smiles' %}<code style="font-size:0.7rem;">{{ row[col][:45] }}{% if row[col]|length > 45 %}...{% endif %}</code>{% else %}{{ row[col] }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+        {% if n_samples > 10 %}<div class="text-center text-muted small py-2">Showing first 10 of {{ n_samples }} rows</div>{% endif %}
+    </div>
+</div>
+
+<!-- Per-Task Results -->
+{% for task_key in tasks %}
+{% set tk = task_key | lower %}
+{% set metrics = all_metrics[tk] %}
+{% set graphs = all_graphs %}
+<h3 class="fw-bold mt-4 mb-3">{{ task_key }} Model</h3>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="stat-card blue"><div class="num">{{ metrics.test.accuracy }}</div><div class="lbl">Test Accuracy</div></div></div>
+    <div class="col-md-3"><div class="stat-card green"><div class="num">{{ metrics.test.roc_auc }}</div><div class="lbl">Test ROC-AUC</div></div></div>
+    <div class="col-md-3"><div class="stat-card purple"><div class="num">{{ metrics.test.f1 }}</div><div class="lbl">Test F1 Score</div></div></div>
+    <div class="col-md-3"><div class="stat-card blue"><div class="num">{{ metrics.test.mcc }}</div><div class="lbl">Test MCC</div></div></div>
+</div>
+
+<div class="card mb-4"><div class="card-header"><i class="bi bi-table"></i> Detailed Metrics — {{ task_key }}</div>
+<div class="card-body p-0"><table class="table table-striped mb-0"><thead class="table-light"><tr><th>Metric</th><th class="text-center">Training Set</th><th class="text-center">Test Set</th></tr></thead>
+<tbody>{% for m in ['accuracy','roc_auc','precision','recall','f1','mcc'] %}<tr><td class="fw-semibold">{{ m|upper|replace('_','-') }}</td><td class="text-center">{{ metrics.train[m] }}</td><td class="text-center fw-bold">{{ metrics.test[m] }}</td></tr>{% endfor %}</tbody></table></div></div>
+
+<div class="row g-4"><div class="col-lg-6"><div class="card"><div class="card-header">ROC Curve</div><div class="card-body text-center"><img src="data:image/png;base64,{{ graphs['roc_' + tk] }}" class="graph-img" alt="ROC"></div></div></div>
+<div class="col-lg-6"><div class="card"><div class="card-header">Confusion Matrix</div><div class="card-body text-center"><img src="data:image/png;base64,{{ graphs['cm_' + tk] }}" class="graph-img" alt="CM"></div></div></div></div>
+
+<div class="row mt-4"><div class="col-12"><div class="card"><div class="card-header">Top 15 Feature Importances</div><div class="card-body text-center"><img src="data:image/png;base64,{{ graphs['importance_' + tk] }}" class="graph-img" alt="Importance"></div></div></div></div>
+
+{% if graphs['topo_' + tk] is defined %}
+<div class="row mt-4"><div class="col-lg-6"><div class="card"><div class="card-header"><i class="bi bi-diagram-3"></i> Topological Indices — Wiener, Zagreb &amp; Balaban</div><div class="card-body text-center"><img src="data:image/png;base64,{{ graphs['topo_' + tk] }}" class="graph-img" alt="Topo"></div></div></div>
+<div class="col-lg-6"><div class="card h-100"><div class="card-header"><i class="bi bi-info-circle"></i> What This Means</div><div class="card-body"><p class="small">These four topological indices are <strong>always included</strong> in the feature matrix. They capture molecular connectivity and branching.</p>
+<table class="table table-sm table-striped small mb-0"><thead><tr><th>Index</th><th class="text-end">Importance</th><th>Interpretation</th></tr></thead><tbody>
+{% set td = graphs['topo_data_' + tk] %}
+<tr><td><strong>Wiener</strong></td><td class="text-end">{{ td.WienerIndex }}</td><td>Half-sum of all atom-pair distances — molecular compactness</td></tr>
+<tr><td><strong>Zagreb M₁</strong></td><td class="text-end">{{ td.Zagreb_M1 }}</td><td>Sum of squared atom degrees — branching complexity</td></tr>
+<tr><td><strong>Zagreb M₂</strong></td><td class="text-end">{{ td.Zagreb_M2 }}</td><td>Sum of bond degree products — edge connectivity</td></tr>
+<tr><td><strong>Balaban J</strong></td><td class="text-end">{{ td.BalabanJ }}</td><td>Distance-based index normalized for size — molecular shape</td></tr></tbody></table></div></div></div>
+{% endif %}
+
+{% if all_best_params and all_best_params[tk] is defined %}
+<div class="card mb-4 mt-4"><div class="card-header"><i class="bi bi-sliders"></i> Best Hyperparameters — {{ task_key }}</div><div class="card-body"><div class="row g-2">{% for key, value in all_best_params[tk].items() %}<div class="col-md-3 col-6"><small class="text-muted">{{ key }}</small><br><code>{{ value }}</code></div>{% endfor %}</div></div></div>
+{% endif %}
+
+{% endfor %}
+
+<div class="text-center mt-4 mb-4">
+    <a href="{{ url_for('predict') }}" class="btn btn-primary btn-lg">
+        <i class="bi bi-lightning"></i> Now Predict New Compounds
+    </a>
+</div>
+
+{% endblock %}

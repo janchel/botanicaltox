@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Train Model — Drug AI{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-3">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-upload"></i> Upload Training Data
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" enctype="multipart/form-data" id="trainForm">
+                    <!-- File Upload -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> Dataset File
+                        </label>
+                        <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                            <i class="bi bi-cloud-upload"></i>
+                            <p class="mt-2 mb-1 fw-semibold">Click to browse or drag &amp; drop</p>
+                            <p class="text-muted small mb-0" id="fileName">CSV or Excel (.xlsx) — Max 50 MB</p>
+                        </div>
+                        <input type="file" name="dataset" id="fileInput" accept=".csv,.xlsx,.xls"
+                               style="display:none" required
+                               onchange="document.getElementById('fileName').textContent = this.files[0]?.name || 'CSV or Excel (.xlsx) — Max 50 MB'">
+                    </div>
+
+                    <!-- Task Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-bullseye"></i> Prediction Task
+                        </label>
+                        <div class="d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="task_activity"
+                                       id="taskActivity" value="activity" checked>
+                                <label class="form-check-label" for="taskActivity">
+                                    <strong>Activity</strong> <span class="text-muted">(OXA-23)</span>
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="task_toxicity"
+                                       id="taskToxicity" value="toxicity" checked>
+                                <label class="form-check-label" for="taskToxicity">
+                                    <strong>Toxicity</strong> <span class="text-muted">(Human)</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-text">Train one or both. Your CSV must have the corresponding label column(s).</div>
+                    </div>
+
+                    <!-- Custom Task Name -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" for="taskName">
+                            <i class="bi bi-pencil"></i> Task Name <span class="text-muted">(optional)</span>
+                        </label>
+                        <input type="text" class="form-control" id="taskName" name="task_name"
+                               placeholder="e.g. Flavonoid vs Alkaloid, Antibiotic, Blood-Brain Barrier"
+                               style="border-radius:10px;">
+                        <div class="form-text">Leave blank to use "Activity" or "Toxicity". This name appears in results and the model list.</div>
+                    </div>
+
+                    <!-- Label Column -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" for="labelCol">
+                            <i class="bi bi-tag"></i> Label Column Name
+                        </label>
+                        <input type="text" class="form-control" id="labelCol" name="label_col"
+                               placeholder="Activity_Label or Toxicity_Label"
+                               style="border-radius:10px;">
+                        <div class="form-text">Auto-detected as <code>Activity_Label</code> or <code>Toxicity_Label</code> if left blank.</div>
+                    </div>
+
+                    <!-- Model Name -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" for="modelName">
+                            <i class="bi bi-bookmark"></i> Model / Dataset Name
+                        </label>
+                        <input type="text" class="form-control" id="modelName" name="model_name"
+                               placeholder="e.g. library1, natural_products, fda_approved"
+                               value="default"
+                               style="border-radius:10px;">
+                        <div class="form-text">Give your model a name so you can select it later during prediction. Each name creates a separate saved model.</div>
+                    </div>
+
+                    <!-- Hyperparameter Tuning -->
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="tuneSwitch" name="tune">
+                            <label class="form-check-label fw-semibold" for="tuneSwitch">
+                                Hyperparameter Tuning <span class="badge bg-warning text-dark ms-1">Slower</span>
+                            </label>
+                        </div>
+                        <div class="form-text">Enables RandomizedSearchCV for better model performance. Takes longer.</div>
+                    </div>
+
+                    <hr>
+                    <button type="submit" class="btn btn-primary btn-lg w-100" id="submitBtn">
+                        <i class="bi bi-cpu"></i> Train Model
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Expected CSV Format
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-2">Your CSV only needs <strong>Smiles</strong> and <strong>one label column</strong> (any name):</p>
+                <table class="table table-sm table-bordered">
+                    <thead class="table-light">
+                        <tr><th>Compound_ID</th><th>Smiles</th><th>Activity_Label</th><th>Toxicity_Label</th><th>Your_Label</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>CMP001</td><td><code>CCO</code></td><td>1</td><td>0</td><td>1</td></tr>
+                        <tr><td>CMP002</td><td><code>CCCC</code></td><td>1</td><td>1</td><td>0</td></tr>
+                        <tr><td>CMP003</td><td><code>CC(=O)O</code></td><td>0</td><td>0</td><td>1</td></tr>
+                    </tbody>
+                </table>
+                <p class="text-muted small mb-2">
+                    <strong>Built-in:</strong> Activity_Label (1=Active, 0=Inactive), Toxicity_Label (1=Toxic, 0=Safe).
+                </p>
+                <p class="text-muted small mb-0">
+                    <strong>Custom:</strong> Use <em>any</em> column name (e.g., Flavonoid_Label, Antibiotic_Label).
+                    Type it in "Label Column Name" above and optionally set a custom "Task Name".
+                    Labels must be 0 or 1.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+// Drag & drop support
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#2563eb'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#e2e8f0'; });
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = '#e2e8f0';
+    const file = e.dataTransfer.files[0];
+    if (file) {
+        document.getElementById('fileInput').files = e.dataTransfer.files;
+        document.getElementById('fileName').textContent = file.name;
+    }
+});
+
+// Auto-fill label column based on task
+document.getElementById('taskActivity').addEventListener('change', () => {
+    document.getElementById('labelCol').placeholder = 'Activity_Label';
+});
+document.getElementById('taskToxicity').addEventListener('change', () => {
+    document.getElementById('labelCol').placeholder = 'Toxicity_Label';
+});
+
+// Show loading state
+document.getElementById('trainForm').addEventListener('submit', () => {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Training...';
+});
+</script>
+{% endblock %}

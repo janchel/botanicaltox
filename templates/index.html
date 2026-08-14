@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Drug AI — Home{% endblock %}
+{% block content %}
+
+<div class="text-center mb-5 mt-4">
+    <h1 class="fw-bold" style="font-size: 2.5rem;">
+        <i class="bi bi-cpu-fill" style="color: var(--primary);"></i> Drug AI
+    </h1>
+    <p class="text-muted lead mt-3">
+        Machine Learning for Molecular Activity &amp; Toxicity Prediction
+    </p>
+    <p class="text-muted">
+        Upload compound data, train Random Forest models, and predict new molecules — all from your browser.
+    </p>
+</div>
+
+<div class="row g-4 justify-content-center">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center p-4">
+                <i class="bi bi-graph-up-arrow" style="font-size: 3rem; color: var(--primary);"></i>
+                <h3 class="mt-3 fw-bold">Train a Model</h3>
+                <p class="text-muted mt-2 small">
+                    Upload a CSV with SMILES and labels. The system will extract molecular descriptors,
+                    train a Random Forest classifier, and show evaluation metrics and graphs.
+                </p>
+                <hr>
+                <div class="text-muted small mb-3">
+                    <i class="bi bi-check-circle text-success"></i> CSV or Excel files<br>
+                    <i class="bi bi-check-circle text-success"></i> Activity &amp; Toxicity training<br>
+                    <i class="bi bi-check-circle text-success"></i> ROC curves &amp; confusion matrices
+                </div>
+                <a href="{{ url_for('train') }}" class="btn btn-primary btn-lg px-4">
+                    <i class="bi bi-rocket-takeoff"></i> Train Model
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center p-4">
+                <i class="bi bi-lightning-charge" style="font-size: 3rem; color: var(--success);"></i>
+                <h3 class="mt-3 fw-bold">Predict Compounds</h3>
+                <p class="text-muted mt-2 small">
+                    Upload new compounds (SMILES) and get instant activity and toxicity predictions
+                    using the trained models. Download results as CSV.
+                </p>
+                <hr>
+                <div class="text-muted small mb-3">
+                    <i class="bi bi-check-circle text-success"></i> SMILES auto-detection<br>
+                    <i class="bi bi-check-circle text-success"></i> Activity &amp; Toxicity scores<br>
+                    <i class="bi bi-check-circle text-success"></i> Downloadable results
+                </div>
+                <a href="{{ url_for('predict') }}" class="btn btn-outline-primary btn-lg px-4">
+                    <i class="bi bi-lightning"></i> Predict
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 justify-content-center mt-2">
+    <div class="col-md-4">
+        <div class="card h-100 border-success">
+            <div class="card-body text-center p-4">
+                <i class="bi bi-flower1" style="font-size: 3rem; color: #059669;"></i>
+                <h3 class="mt-3 fw-bold">Search by Plant</h3>
+                <p class="text-muted mt-2 small">
+                    Enter a plant name and optionally upload a photo. The system searches
+                    PubChem for known compounds and predicts their activity &amp; toxicity.
+                </p>
+                <hr>
+                <div class="text-muted small mb-3">
+                    <i class="bi bi-check-circle text-success"></i> Plant photo upload<br>
+                    <i class="bi bi-check-circle text-success"></i> PubChem compound search<br>
+                    <i class="bi bi-check-circle text-success"></i> Auto SMILES extraction
+                </div>
+                <a href="{{ url_for('plant') }}" class="btn btn-success btn-lg px-4">
+                    <i class="bi bi-flower1"></i> Plant Search
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-warning">
+            <div class="card-body text-center p-4">
+                <i class="bi bi-trophy" style="font-size: 3rem; color: #f59e0b;"></i>
+                <h3 class="mt-3 fw-bold">Rank Compounds</h3>
+                <p class="text-muted mt-2 small">
+                    Predict and rank compounds by combined drug-likeness score.
+                    Find the top 15 best candidates — highest activity, lowest toxicity.
+                </p>
+                <hr>
+                <div class="text-muted small mb-3">
+                    <i class="bi bi-check-circle text-success"></i> Combined Activity−Toxicity score<br>
+                    <i class="bi bi-check-circle text-success"></i> Top 15 ranked display<br>
+                    <i class="bi bi-check-circle text-success"></i> Downloadable ranking CSV
+                </div>
+                <a href="{{ url_for('ranking') }}" class="btn btn-warning btn-lg px-4">
+                    <i class="bi bi-trophy"></i> Rank Compounds
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="row mt-5 g-4">
+    <div class="col-md-4">
+        <div class="stat-card blue">
+            <div class="num">RDKit</div>
+            <div class="lbl">Molecular Descriptor Engine</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card green">
+            <div class="num">211+</div>
+            <div class="lbl">Descriptors per Compound</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card purple">
+            <div class="num">Random Forest</div>
+            <div class="lbl">Machine Learning Algorithm</div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
