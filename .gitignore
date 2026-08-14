@@ -1,0 +1,28 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime / temp
+sessions/
+uploads/
+server.pid
+server.log
+
+# Generated output (auto-created at runtime)
+outputs/
+datasets/features.csv
+datasets/medchem_features.csv
+datasets/dup_test.csv
+
+# Models — keep only starter models
+models/*.pkl
+!models/activity_legacy.pkl
+!models/toxicity_legacy.pkl
+
+# OS files
+._*
+.DS_Store

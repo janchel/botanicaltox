@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Rank Compounds — Drug AI{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-3">
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-trophy"></i> Rank Top Compounds
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted small mb-4">
+                    Upload a CSV of compounds to predict and rank. The system will
+                    predict activity &amp; toxicity, score each compound, and show the
+                    <strong>top 15 best candidates</strong> sorted by Combined Score
+                    (Activity − Toxicity = best drug-like profile).
+                </p>
+
+                <form method="POST" enctype="multipart/form-data" id="rankForm">
+                    <!-- Model Selection -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold"><i class="bi bi-shield-check"></i> Select Trained Model</label>
+                        {% if available_models %}
+                        <select class="form-select" name="model_name" style="border-radius:10px;">
+                            {% for name, paths in available_models.items() %}
+                            <option value="{{ name }}">
+                                {{ name | replace('_', ' ') | title }}
+                                ({{ paths.keys() | join(', ') | title }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% else %}
+                        <div class="alert alert-warning mb-0 py-2">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            No trained models found. <a href="{{ url_for('train') }}">Train a model first</a>.
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- File Upload -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> Compounds File(s)
+                        </label>
+                        <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+                            <i class="bi bi-cloud-upload"></i>
+                            <p class="mt-2 mb-1 fw-semibold">Click to browse or drag &amp; drop</p>
+                            <p class="text-muted small mb-0" id="fileName">CSV or Excel — select multiple files to merge &amp; rank</p>
+                        </div>
+                        <input type="file" name="datasets" id="fileInput" accept=".csv,.xlsx,.xls"
+                               style="display:none" multiple
+                               onchange="updateFileList()">
+                        <div id="fileList" class="mt-2"></div>
+                    </div>
+
+                    <hr>
+                    <button type="submit" class="btn btn-warning btn-lg w-100" id="submitBtn"
+                            {% if not available_models %}disabled{% endif %}>
+                        <i class="bi bi-trophy"></i> Rank Top Compounds
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header"><i class="bi bi-info-circle"></i> How Ranking Works</div>
+            <div class="card-body">
+                <p class="small text-muted mb-2">
+                    <strong>Combined Score = Activity_Score − Toxicity_Score</strong>
+                </p>
+                <ul class="small text-muted mb-0">
+                    <li>High activity + low toxicity = <strong>Best drug candidate</strong> (high score)</li>
+                    <li>Low activity + high toxicity = <strong>Worst candidate</strong> (low/negative score)</li>
+                    <li>Top 15 compounds are shown, sorted best → worst</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#f59e0b'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#e2e8f0'; });
+dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.style.borderColor = '#e2e8f0';
+    document.getElementById('fileInput').files = e.dataTransfer.files;
+    updateFileList();
+});
+
+function updateFileList() {
+    const input = document.getElementById('fileInput');
+    const list = document.getElementById('fileList');
+    const label = document.getElementById('fileName');
+    if (input.files.length === 0) {
+        label.textContent = 'CSV or Excel — select multiple files to merge & rank';
+        list.innerHTML = '';
+        return;
+    }
+    label.textContent = input.files.length + ' file(s) selected';
+    list.innerHTML = '';
+    for (let f of input.files) {
+        list.innerHTML += '<span class="badge bg-light text-dark me-1 mb-1">📄 ' + f.name + '</span>';
+    }
+}
+
+document.getElementById('rankForm').addEventListener('submit', () => {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Merging & Ranking...';
+});
+</script>
+{% endblock %}

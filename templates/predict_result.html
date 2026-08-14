@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}Prediction Results — Drug AI{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+    <a href="{{ url_for('predict') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Predict More
+    </a>
+</div>
+
+<h2 class="fw-bold mb-1">
+    <i class="bi bi-check-circle-fill text-success"></i> Predictions Ready
+</h2>
+<p class="text-muted">{{ total_rows }} compounds processed</p>
+
+<!-- Distribution Charts -->
+{% if graphs %}
+<div class="row g-4 mb-4">
+    {% if graphs.activity_pie %}
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-pie-chart"></i> Activity Distribution</div>
+            <div class="card-body text-center">
+                <img src="data:image/png;base64,{{ graphs.activity_pie }}" class="graph-img" alt="Activity Distribution">
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% if graphs.toxicity_pie %}
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-pie-chart"></i> Toxicity Distribution</div>
+            <div class="card-body text-center">
+                <img src="data:image/png;base64,{{ graphs.toxicity_pie }}" class="graph-img" alt="Toxicity Distribution">
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Molecule Structures -->
+{% if graphs.mol_images %}
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-hexagon"></i> Compound Structures <span class="text-muted">({{ graphs.mol_images | length }}{% if graphs.total_molecules and graphs.total_molecules > graphs.mol_images|length %} of {{ graphs.total_molecules }}{% endif %} molecules)</span></div>
+    <div class="card-body">
+        <div style="display:flex; overflow-x:auto; gap:12px; padding-bottom:8px;">
+            {% for mol in graphs.mol_images %}
+            <div style="flex:0 0 auto; width:180px; text-align:center;">
+                <img src="data:image/png;base64,{{ mol.image }}"
+                     alt="Structure of {{ mol.id }}"
+                     style="width:100%; height:auto; border:1px solid #e2e8f0; border-radius:8px; padding:4px; background:white;">
+                <small class="d-block text-muted mt-1" style="word-break:break-all; font-size:0.7rem;">{{ mol.id[:35] }}{% if mol.id|length > 35 %}…{% endif %}</small>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- Results Table -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-table"></i> Results Preview <span class="text-muted">(first 20 rows)</span></span>
+        <a href="{{ url_for('download', session_id=session_id, filename=result_filename) }}"
+           class="btn btn-sm btn-success">
+            <i class="bi bi-download"></i> Download Full CSV
+        </a>
+    </div>
+    <div class="card-body p-0" style="overflow-x:auto;">
+        <table class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    {% for col in columns %}
+                    <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview %}
+                <tr>
+                    {% for col in columns %}
+                    <td>
+                        {% if col == 'Activity_Prediction' %}
+                            <span class="badge {% if row[col] == 1 %}badge-active{% else %}badge-inactive{% endif %}">
+                                {{ 'Active' if row[col] == 1 else 'Inactive' }}
+                            </span>
+                        {% elif col == 'Toxicity_Prediction' %}
+                            <span class="badge {% if row[col] == 1 %}badge-toxic{% else %}badge-safe{% endif %}">
+                                {{ 'Toxic' if row[col] == 1 else 'Safe' }}
+                            </span>
+                        {% elif col == 'Chemical_Class' %}
+                            <span class="badge bg-info text-dark">{{ row[col] }}</span>
+                        {% elif col == 'Activity_Score' or col == 'Toxicity_Score' %}
+                            <code>{{ row[col] }}</code>
+                        {% else %}
+                            {{ row[col] }}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="text-center mt-4 mb-4">
+    <a href="{{ url_for('download', session_id=session_id, filename=result_filename) }}"
+       class="btn btn-success btn-lg">
+        <i class="bi bi-download"></i> Download Full Results (CSV)
+    </a>
+</div>
+
+<!-- AI Explanation Section -->
+{% if ai_available %}
+<div class="card mb-4 border-primary">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-robot"></i> AI-Powered Explanation</span>
+        <button class="btn btn-sm btn-light" id="explainBtn" onclick="requestExplanation()">
+            <i class="bi bi-magic"></i> Explain These Results
+        </button>
+    </div>
+    <div class="card-body">
+        <div id="explainOutput" style="max-height: 600px; overflow-y: auto; line-height: 1.7;">
+            <p class="text-muted text-center py-3" id="explainPlaceholder">
+                <i class="bi bi-info-circle"></i>
+                Click <strong>"Explain These Results"</strong> to get an AI-generated breakdown
+                of what these predictions mean, which molecular features are most important,
+                and how to interpret the results.
+                <br><small class="text-muted">(Uses ~2,000 tokens — one generation per prediction run to save costs.)</small>
+            </p>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card mb-4 border-secondary">
+    <div class="card-header bg-secondary text-white">
+        <span><i class="bi bi-robot"></i> AI Explanation</span>
+        <span class="badge bg-light text-dark ms-2">Optional</span>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-0">
+            To enable AI-powered explanations, you need set your AI model.
+        </p>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+let explanationGenerated = false;
+
+function requestExplanation() {
+    const btn = document.getElementById('explainBtn');
+
+    // Prevent regeneration — only one explanation per prediction run
+    if (explanationGenerated) {
+        return;
+    }
+
+    const output = document.getElementById('explainOutput');
+    const placeholder = document.getElementById('explainPlaceholder');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+
+    if (placeholder) placeholder.remove();
+
+    // Create a content div for the streamed text
+    const contentDiv = document.createElement('div');
+    contentDiv.style.whiteSpace = 'pre-wrap';
+    output.appendChild(contentDiv);
+
+    const evtSource = new EventSource('/explain');
+
+    evtSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.error) {
+                contentDiv.innerHTML += `<div class="alert alert-danger">${data.error}</div>`;
+                evtSource.close();
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Retry';
+            } else if (data.reasoning) {
+                let reasoningDiv = document.getElementById('reasoningBlock');
+                if (!reasoningDiv) {
+                    reasoningDiv = document.createElement('details');
+                    reasoningDiv.id = 'reasoningBlock';
+                    reasoningDiv.style.marginBottom = '10px';
+                    const summary = document.createElement('summary');
+                    summary.textContent = '🧠 AI Reasoning (click to expand)';
+                    summary.className = 'text-muted small';
+                    reasoningDiv.appendChild(summary);
+                    output.insertBefore(reasoningDiv, contentDiv);
+                }
+                const span = document.createElement('span');
+                span.className = 'text-muted small';
+                span.textContent = data.reasoning;
+                reasoningDiv.appendChild(span);
+            } else if (data.content) {
+                contentDiv.innerHTML += data.content;
+                output.scrollTop = output.scrollHeight;
+            } else if (data.done) {
+                evtSource.close();
+                explanationGenerated = true;
+                // Lock the button — no regeneration
+                btn.disabled = true;
+                btn.innerHTML = '<i class="bi bi-check-circle"></i> Explained ✓';
+                btn.className = 'btn btn-sm btn-outline-light';
+                // Convert markdown-like formatting
+                contentDiv.innerHTML = contentDiv.innerHTML
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n\n/g, '</p><p>')
+                    .replace(/\n- /g, '<br>• ');
+                contentDiv.innerHTML = '<p>' + contentDiv.innerHTML + '</p>';
+            }
+        } catch(e) {
+            console.error('Parse error:', e);
+        }
+    };
+
+    evtSource.onerror = function() {
+        evtSource.close();
+        if (!explanationGenerated) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Retry';
+        }
+        if (!contentDiv.textContent.trim()) {
+            contentDiv.innerHTML = '<div class="alert alert-warning">Connection lost. Please try again.</div>';
+        }
+    };
+}
+</script>
+{% endblock %}

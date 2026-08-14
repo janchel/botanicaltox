@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Settings — Drug AI{% endblock %}
+{% block content %}
+
+<div class="mb-4">
+    <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Home
+    </a>
+</div>
+
+<h2 class="fw-bold mb-1">
+    <i class="bi bi-gear"></i> Settings
+</h2>
+<p class="text-muted">Manage your trained models and datasets.</p>
+
+<!-- Trained Models -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-database"></i> Trained Models</span>
+        <span class="badge bg-primary">{{ models | length }} model(s)</span>
+    </div>
+    <div class="card-body p-0">
+        {% if models %}
+        <table class="table table-striped table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Model / Dataset Name</th>
+                    <th>Tasks</th>
+                    <th>Size</th>
+                    <th class="text-end">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, info in models.items() %}
+                <tr>
+                    <td>
+                        <strong>{{ name | replace('_', ' ') | title }}</strong>
+                    </td>
+                    <td>
+                        {% for task in info.tasks %}
+                        <span class="badge bg-success me-1">{{ task | title }}</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% set total = namespace(val=0) %}
+                        {% for t in info.tasks.values() %}{% set total.val = total.val + t.size_kb %}{% endfor %}
+                        {{ (total.val / 1024) | round(1) if total.val > 1024 else total.val | round(0) }}
+                        {{ 'MB' if total.val > 1024 else 'KB' }}
+                    </td>
+                    <td class="text-end">
+                        {% if name in ('default', 'legacy') %}
+                        <span class="badge bg-secondary"><i class="bi bi-shield-lock"></i> Protected</span>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('delete_model', model_name=name) }}"
+                              onsubmit="return confirm('Delete model \'{{ name | replace('_', ' ') | title }}\'? This cannot be undone.');"
+                              style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i> Delete
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-inbox" style="font-size:3rem;"></i>
+            <p class="mt-2">No trained models found.</p>
+            <a href="{{ url_for('train') }}" class="btn btn-primary btn-sm">
+                <i class="bi bi-rocket-takeoff"></i> Train a Model
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Info Card -->
+<div class="card mb-4">
+    <div class="card-header"><i class="bi bi-info-circle"></i> Storage Info</div>
+    <div class="card-body">
+        <p class="small text-muted mb-0">
+            <strong>Models</strong> are stored in <code>models/</code> and persist until deleted.
+            <br>
+            <strong>Uploaded files & sessions</strong> are stored in <code>sessions/</code> and auto-cleaned after 24 hours.
+            <br>
+            <strong>Plant photos</strong> are never saved to disk — they exist only in memory during the request.
+        </p>
+    </div>
+</div>
+
+{% endblock %}
