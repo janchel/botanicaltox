@@ -31,7 +31,65 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
-from sklearn.model_selection import StratifiedKFold, RandomizedSearchCV, train_test_split
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import (
+    GroupShuffleSplit,
+    RandomizedSearchCV,
+    StratifiedGroupKFold,
+    StratifiedKFold,
+    train_test_split,
+)
+
+
+# ── Model metadata (notebook-inspired) ──────────────────────────────────────
+
+def attach_model_metadata(model, descriptor_cols, impute_medians):
+    """Attach training-time cleaning metadata to a model.
+
+    The descriptor columns and median-imputation values are stored on the
+    object so that, at PREDICTION time, the exact same preprocessing the
+    model learned on can be reproduced (instead of fill-with-0).
+    """
+    try:
+        model._descriptor_cols = list(descriptor_cols)
+        model._impute_medians = dict(impute_medians)
+    except Exception:
+        pass
+    return model
+
+
+def align_features_for_model(X: pd.DataFrame, model) -> pd.DataFrame:
+    """Align a prediction feature matrix to what a model was trained on.
+
+    - Uses the model's stored descriptor columns (falling back to
+      feature_names_in_ for models saved before metadata existed).
+    - Fills missing/inf/extreme values with the model's TRAINING medians
+      when available, otherwise with 0 (legacy behaviour).
+    """
+    expected = getattr(model, "_descriptor_cols", None)
+    if expected is None:
+        expected = getattr(model, "feature_names_in_", None)
+    if expected is None:
+        return X
+
+    X_aligned = X.reindex(columns=list(expected)).replace([np.inf, -np.inf], np.nan)
+    X_aligned = X_aligned.mask(X_aligned.abs() > 1e10)
+
+    medians = getattr(model, "_impute_medians", None)
+    if medians is not None:
+        X_aligned = X_aligned.fillna(pd.Series(medians))
+    else:
+        X_aligned = X_aligned.fillna(0)
+    return X_aligned
+
+
+def calibrated_estimator(model):
+    """Return the underlying classifier for feature_importances_ access.
+
+    CalibratedClassifierCV wraps the real RandomForest; use its fitted
+    `estimator` attribute, otherwise the model itself.
+    """
+    return getattr(model, "estimator", model)
 
 
 # ── Data Loading ────────────────────────────────────────────────────────────
@@ -100,9 +158,17 @@ def train_random_forest(
     tune: bool = True,
     n_iter: int = 60,
     cv_folds: int = 5,
-) -> tuple[RandomForestClassifier, dict]:
+    groups: pd.Series | None = None,
+    calibrate: bool = True,
+) -> tuple[object, dict]:
     """
     Train a Random Forest classifier with optional hyperparameter tuning.
+
+    Notebook-inspired improvements:
+      - Scaffold-aware split/CV (pass `groups`, e.g. InChIKey scaffold blocks)
+        so near-duplicate compounds never leak across train/test.
+      - Probability calibration (CalibratedClassifierCV) so raw RF
+        probabilities can be meaningfully multiplied into a priority score.
 
     Parameters
     ----------
@@ -112,19 +178,36 @@ def train_random_forest(
         Number of randomized search iterations.
     cv_folds : int
         Cross-validation folds for hyperparameter search.
+    groups : pd.Series, optional
+        Per-row group labels (e.g. scaffold group ids). When provided, the
+        train/test split and CV become group-aware.
+    calibrate : bool
+        Wrap the final model in CalibratedClassifierCV.
 
     Returns
     -------
-    model : RandomForestClassifier
-        Trained model.
+    model : classifier
+        Trained (and optionally calibrated) model.
     best_params : dict
         Best hyperparameters found (or defaults if tune=False).
     """
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=random_state
-    )
-
-    print(f"  Train set: {X_train.shape[0]} | Test set: {X_test.shape[0]}")
+    # ── Scaffold-aware split when groups are provided ──
+    if groups is not None:
+        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=random_state)
+        tr_idx, te_idx = next(gss.split(X, y, groups=groups))
+        X_train, X_test = X.iloc[tr_idx], X.iloc[te_idx]
+        y_train, y_test = y.iloc[tr_idx], y.iloc[te_idx]
+        groups_train = groups.iloc[tr_idx]
+        leaked = set(groups_train) & set(groups.iloc[te_idx])
+        if leaked:
+            print(f"  ⚠️  Scaffold leakage detected ({len(leaked)} groups shared) — check group data.")
+        print(f"  Scaffold-aware split — Train: {X_train.shape[0]} | Test: {X_test.shape[0]}")
+    else:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, stratify=y, random_state=random_state
+        )
+        groups_train = None
+        print(f"  Train set: {X_train.shape[0]} | Test set: {X_test.shape[0]}")
 
     if tune:
         # Auto-adjust CV folds for small datasets
@@ -145,18 +228,36 @@ def train_random_forest(
             "bootstrap": [True, False],
         }
 
-        cv = StratifiedKFold(n_splits=actual_folds, shuffle=True, random_state=random_state)
-        search = RandomizedSearchCV(
-            RandomForestClassifier(random_state=random_state),
-            param_distributions=param_dist,
-            n_iter=n_iter,
-            cv=cv,
-            scoring="roc_auc",
-            n_jobs=-1,
-            random_state=random_state,
-            verbose=1,
-        )
-        search.fit(X_train, y_train)
+        if groups_train is not None:
+            # Scaffold-grouped CV (never leaks near-duplicates into a fold)
+            n_groups = groups_train.nunique()
+            group_folds = max(2, min(actual_folds, n_groups))
+            cv = StratifiedGroupKFold(n_splits=group_folds, shuffle=True, random_state=random_state)
+            search = RandomizedSearchCV(
+                RandomForestClassifier(random_state=random_state),
+                param_distributions=param_dist,
+                n_iter=n_iter,
+                cv=cv,
+                scoring="roc_auc",
+                n_jobs=-1,
+                random_state=random_state,
+                verbose=1,
+            )
+            search.fit(X_train, y_train, groups=groups_train)
+        else:
+            cv = StratifiedKFold(n_splits=actual_folds, shuffle=True, random_state=random_state)
+            search = RandomizedSearchCV(
+                RandomForestClassifier(random_state=random_state),
+                param_distributions=param_dist,
+                n_iter=n_iter,
+                cv=cv,
+                scoring="roc_auc",
+                n_jobs=-1,
+                random_state=random_state,
+                verbose=1,
+            )
+            search.fit(X_train, y_train)
+
         model = search.best_estimator_
         best_params = search.best_params_
         print(f"  Best params: {best_params}")
@@ -170,6 +271,14 @@ def train_random_forest(
         )
         model.fit(X_train, y_train)
         best_params = model.get_params()
+
+    # ── Calibrate probabilities (isotonic for larger data, sigmoid otherwise) ──
+    if calibrate:
+        method = "isotonic" if len(X_train) >= 1000 else "sigmoid"
+        cal_folds = max(2, min(5, len(X_train)))
+        model = CalibratedClassifierCV(model, method=method, cv=cal_folds)
+        model.fit(X_train, y_train)
+        print(f"  Probabilities calibrated ({method})")
 
     return model, best_params, (X_train, X_test, y_train, y_test)
 
@@ -257,7 +366,7 @@ def evaluate_model(
     plt.close(fig)
 
     # ── Feature Importance ──
-    importances = model.feature_importances_
+    importances = calibrated_estimator(model).feature_importances_
     indices = np.argsort(importances)[::-1][:20]  # top 20
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.barh(range(len(indices)), importances[indices][::-1], align="center")
@@ -283,6 +392,17 @@ def save_model(model, path: str):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, path)
     print(f"  Model saved to: {path}")
+
+
+def save_model_with_metadata(model, path: str, descriptor_cols, impute_medians):
+    """Persist a model together with its training-time cleaning metadata.
+
+    The metadata (kept descriptor columns + median imputation values) is
+    attached to the model object so predictions can reproduce the exact
+    preprocessing the model learned on.
+    """
+    attach_model_metadata(model, descriptor_cols, impute_medians)
+    save_model(model, path)
 
 
 def build_cli(task_name: str, label_col: str) -> argparse.ArgumentParser:

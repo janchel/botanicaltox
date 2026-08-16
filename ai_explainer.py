@@ -48,7 +48,12 @@ _openai_client = None
 
 
 def _get_client():
-    """Lazily create the OpenAI-compatible client."""
+    """Lazily create the OpenAI-compatible client.
+
+    Returns None (instead of raising) if the client can't be built — e.g. a
+    SOCKS proxy is configured but the `socksio` package isn't installed, or a
+    bad API key/base URL. The explainer then simply stays disabled.
+    """
     global _openai_client
     if _openai_client is not None:
         return _openai_client
@@ -57,15 +62,22 @@ def _get_client():
         return None
 
     try:
+        import httpx
         from openai import OpenAI
     except ImportError:
         return None
 
-    _openai_client = OpenAI(
-        base_url=AI_BASE_URL + "/v1",
-        api_key=AI_API_KEY,
-    )
-    return _openai_client
+    try:
+        # trust_env=False so httpx ignores the ambient SOCKS proxy (which
+        # would otherwise require the optional `socksio` package).
+        _openai_client = OpenAI(
+            base_url=AI_BASE_URL + "/v1",
+            api_key=AI_API_KEY,
+            http_client=httpx.Client(trust_env=False),
+        )
+        return _openai_client
+    except Exception:
+        return None
 
 
 def is_available() -> bool:

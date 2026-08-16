@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Login — BotanicalTox{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header text-center">
+                <i class="bi bi-flower1" style="font-size: 1.5rem; color: var(--primary);"></i>
+                <h4 class="mb-0 mt-2">BotanicalTox</h4>
+                <p class="text-muted small mb-0">Sign in to access the ML pipeline</p>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="username" class="form-label fw-semibold">
+                            <i class="bi bi-person"></i> Username
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username"
+                               placeholder="Enter your username" required autofocus
+                               value="{{ request.form.username if request.method == 'POST' else '' }}">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="password" class="form-label fw-semibold">
+                            <i class="bi bi-lock"></i> Password
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password"
+                               placeholder="Enter your password" required>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-box-arrow-in-right"></i> Sign In
+                        </button>
+                    </div>
+                </form>
+
+                <div class="text-center mt-4">
+                    <p class="text-muted small mb-0">
+                        Don't have an account?
+                        <a href="{{ url_for('register') }}" class="fw-semibold">Register</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
