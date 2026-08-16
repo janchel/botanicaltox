@@ -114,9 +114,8 @@ def main():
         if act_path.exists():
             print(f"Loading activity model: {act_path}")
             act_model = joblib.load(act_path)
-            # Align features to what the model was trained on
-            expected_features = act_model.feature_names_in_
-            X_aligned = X.reindex(columns=expected_features, fill_value=0)
+            from train_common import align_features_for_model
+            X_aligned = align_features_for_model(X, act_model)
             preds, probas = predict_on_features(act_model, X_aligned)
             results["Activity_Prediction"] = preds
             if probas is not None:
@@ -129,8 +128,8 @@ def main():
         if tox_path.exists():
             print(f"Loading toxicity model: {tox_path}")
             tox_model = joblib.load(tox_path)
-            expected_features = tox_model.feature_names_in_
-            X_aligned = X.reindex(columns=expected_features, fill_value=0)
+            from train_common import align_features_for_model
+            X_aligned = align_features_for_model(X, tox_model)
             preds, probas = predict_on_features(tox_model, X_aligned)
             results["Toxicity_Prediction"] = preds
             if probas is not None:

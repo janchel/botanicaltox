@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Our Team — BotanicalTox{% endblock %}
+{% block content %}
+
+<div class="text-center mb-5 mt-4">
+    <h1 class="fw-bold">
+        <i class="bi bi-people-fill" style="color: var(--primary);"></i> Our Team
+    </h1>
+    <p class="text-muted lead">
+        The Science and Technology Education Center (STEC) — Batch of 2027
+    </p>
+    <p class="text-muted">
+        The students behind BotanicalTox.
+    </p>
+</div>
+
+{% if members %}
+<div class="row g-4 justify-content-center">
+    {% for m in members %}
+    <div class="col-md-4 col-lg-3">
+        <div class="card h-100 text-center">
+            <div class="card-body p-4">
+                <!-- Avatar -->
+                {% if m.avatar %}
+                    <img src="{{ url_for('avatar', user_id=m.id) }}"
+                         alt="{{ m.display_name }}" class="rounded-circle mb-3"
+                         style="width: 100px; height: 100px; object-fit: cover; border: 3px solid var(--border);">
+                {% else %}
+                    <div class="rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center"
+                         style="width: 100px; height: 100px; background: #f1f5f9; border: 3px solid var(--border);">
+                        <i class="bi bi-person-fill" style="font-size: 3rem; color: var(--text-muted);"></i>
+                    </div>
+                {% endif %}
+
+                <!-- Name -->
+                <h5 class="fw-bold mb-1">{{ m.display_name }}</h5>
+                {% if m.course %}
+                    <p class="text-muted small mb-2">
+                        <i class="bi bi-mortarboard"></i> {{ m.course }}
+                    </p>
+                {% endif %}
+
+                <!-- Role badge -->
+                <span class="badge {% if m.role == 'admin' %}text-bg-dark{% else %}text-bg-secondary{% endif %} mb-2">
+                    {{ 'Project Lead' if m.role == 'admin' else 'Team Member' }}
+                </span>
+
+                <!-- Bio -->
+                {% if m.bio %}
+                    <p class="text-muted small mt-2 mb-0" style="white-space: pre-line;">{{ m.bio }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-people" style="font-size: 3rem;"></i>
+    <p class="mt-3 mb-1">Team members coming soon.</p>
+</div>
+{% endif %}
+
+{% endblock %}

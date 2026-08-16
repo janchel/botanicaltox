@@ -209,5 +209,52 @@ def main():
     return result
 
 
+# ── Notebook-inspired improvements (refinedd_code.ipynb) ────────────────────
+
+def scaffold_id(smiles):
+    """First block of the InChIKey = the molecule's constitution (ignores
+    stereochemistry/tautomer details). Compounds sharing this are treated as
+    the same 'group' so near-duplicates never split across train/test."""
+    if smiles is None:
+        return None
+    mol = Chem.MolFromSmiles(str(smiles))
+    if mol is None:
+        return None
+    return Chem.MolToInchiKey(mol).split("-")[0]
+
+
+def clean_descriptor_matrix(df, descriptor_cols, impute_medians=None):
+    """Robust descriptor cleaning ported from refinedd_code.ipynb.
+
+    - Replaces inf with NaN
+    - Treats extreme-magnitude finite values (|x| > 1e10) as missing (RDKit's
+      Ipc descriptor can overflow float32 during fitting otherwise)
+    - During TRAINING (impute_medians=None): drops columns that are >5% missing,
+      then imputes remaining NaN with the column median. Returns the kept
+      columns and the median dict so they can be reused at prediction time.
+    - During PREDICTION (impute_medians=dict): reduces to exactly the kept
+      columns and fills with the TRAINING medians (never recomputes).
+
+    Returns (X_clean, keep_cols, medians).
+    """
+    X = df[descriptor_cols].replace([np.inf, -np.inf], np.nan)
+    SAFE_MAX = 1e10
+    X = X.mask(X.abs() > SAFE_MAX)
+
+    if impute_medians is None:
+        nan_frac = X.isna().mean()
+        keep_cols = nan_frac[nan_frac <= 0.05].index.tolist()
+        if not keep_cols:
+            keep_cols = descriptor_cols[:1]  # never return an empty feature set
+        X = X[keep_cols]
+        medians = X.median().to_dict()
+        X = X.fillna(medians)
+        return X, keep_cols, medians
+    else:
+        keep_cols = list(impute_medians.keys())
+        X = X[keep_cols].fillna(impute_medians)
+        return X, keep_cols, impute_medians
+
+
 if __name__ == "__main__":
     main()

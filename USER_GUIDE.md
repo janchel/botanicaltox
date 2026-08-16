@@ -1,19 +1,19 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║     Drug AI — USER GUIDE                                                     ║
-║     How to Predict Compound Activity & Toxicity                              ║
-║     Version 2.0 — July 2026                                                  ║
+║     BotanicalTox — USER GUIDE                                                     ║
+║     How to Predict Plant Compound Toxicity                              ║
+║     Version 3.1 — August 2026                                                  ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 
 WHAT IS THIS APP?
 ─────────────────
-Drug AI is a Machine Learning prediction tool. It predicts two things about
-chemical compounds:
+BotanicalTox is a Machine Learning prediction tool for plant toxicity. It predicts the toxicity of
+chemical compounds found in plants:
 
-  1. ACTIVITY   — Will this compound inhibit OXA-23 (a bacterial enzyme)?
-  2. TOXICITY   — Is this compound likely toxic to humans?
+  1. TOXICITY   — Is this compound likely toxic to humans?
+  2. ACTIVITY   — Does this compound have biological activity?
 
 It uses Random Forest classifiers trained on molecular descriptors calculated
 by RDKit (a chemistry toolkit). Students upload compound data, train models,
@@ -21,6 +21,98 @@ and get predictions — all through a web browser.
 
 ⚠️  IMPORTANT: These are COMPUTATIONAL predictions, not lab results.
     Always validate predictions with experimental testing.
+
+
+═══════════════════════════════════════════════════════════════════════════════
+LOGIN — Accessing the Site
+═══════════════════════════════════════════════════════════════════════════════
+
+    The landing (home) page is PUBLIC — anyone can view it without logging in.
+    The Train / Predict / Plant / Rank features require a login.
+
+    When a guest clicks a protected link (e.g. "Train"), they are sent to the
+    Login page. After signing in, they are returned to the page they requested.
+
+  1.1  First Run — Default Admin
+  ─────────────────────────────
+      On the first launch, a default admin account is created:
+        Username:  admin
+        Password:  admin123   (CHANGE THIS AFTER FIRST LOGIN!)
+
+      ⚠️  To change it, set ADMIN_USERNAME and ADMIN_PASSWORD in a .env file
+          BEFORE the first run, then delete the instance/users.db file.
+
+  1.2  Creating User Accounts (Admin Approval Required)
+  ─────────────────────────────────────────────────────
+      Any user can click "Register" to create their own account.
+
+      New accounts are created in a PENDING state — they cannot log in
+      until an administrator approves them.
+
+      ⚠️  After registering, wait for an admin to approve your account.
+          You will see: "Registration submitted! An administrator must
+          approve your account before you can log in."
+
+      Once approved, the account gets the "user" role and full access to
+      Train / Predict / Plant / Rank features.
+
+  1.3  Admin — Approving New Users
+  ─────────────────────────────────
+      Admins see a "Users" button in the navigation bar (with a badge
+      showing how many registrations are pending).
+
+      Click "Users" → the management page lists every account:
+        • Approve  — allow a pending user to log in
+        • Reject   — suspend an approved user (blocks login again)
+        • Promote  — grant a user the admin role (so they can also approve
+                     users and manage the site)
+        • Demote   — remove a user's admin role
+        • Delete   — permanently remove an account (with confirmation)
+
+      The admin account itself cannot be promoted/demoted/rejected/deleted
+      (self-protection), and the LAST admin cannot be demoted (avoids lockout).
+
+  1.4  Logging Out
+  ─────────────────────────────
+      Click your username (top-right) → Logout.
+
+      Sessions expire when the browser is closed. Protected pages redirect
+      to the login page if you are not signed in.
+
+  1.4b  Changing Your Password
+  ─────────────────────────────
+      Any logged-in user can change their own password from
+      Settings → "Change Password":
+        • Current Password (to verify it's really you)
+        • New Password (min 6 characters)
+        • Confirm New Password
+
+      The default admin password should be changed here after first login.
+
+  1.5  Public Pages
+  ─────────────────────────────
+      These pages do NOT require login:
+        • Home (/)            — landing page
+        • Team (/team)        — student members & their profiles
+        • Login / Register    — auth pages
+
+  1.6  Team Profiles & the Team Page
+  ─────────────────────────────────────
+      The TEAM page (public) shows the student members behind the project.
+      It is a CURATED list — not every registered user appears on it.
+
+      • Only approved users explicitly marked as a "Team member" by the
+        ADMIN (Users → "Team" button) are shown on the page.
+      • Each member customizes their own profile from
+        Settings → "Your Profile":
+          - Full Name
+          - Course / Program
+          - Bio (short intro)
+          - Profile Picture (PNG / JPG / GIF / WebP)
+      • Admins are shown as "Project Lead", others as "Team Member".
+      • Profile pictures are stored in instance/avatars/.
+      • A member with no profile yet still appears (showing just their
+        username + default icon), so the admin can pre-add the team list.
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -44,6 +136,15 @@ BEFORE YOU START — The Workflow
 ═══════════════════════════════════════════════════════════════════════════════
 1. TRAINING — Teach the Model
 ═══════════════════════════════════════════════════════════════════════════════
+
+    ⚡  MODEL IMPROVEMENTS (from refinedd_code.ipynb):
+      • Scaffold-aware splitting — near-duplicate compounds (same scaffold)
+        never leak across train/test, giving honest evaluation scores.
+      • Probability calibration — prediction scores are calibrated so they
+        can be meaningfully compared / multiplied into a priority score.
+      • Robust feature cleaning — missing/extreme descriptor values are
+        imputed with training medians, and the same values are reused when
+        predicting, so scores stay consistent with what the model learned.
 
 1.1  Prepare Your Training Data
 ─────────────────────────────────
@@ -218,7 +319,9 @@ BEFORE YOU START — The Workflow
           → Your data may not separate well. Try different descriptors.
         • All scores are 1.0?
           → Suspiciously perfect. Check for data leakage (same compounds
-            in train and test).
+            in train and test). The app now uses SCAFFOLD-AWARE splitting,
+            which prevents near-duplicate compounds from leaking across
+            train/test, so test scores are more honest than before.
 
 
 1.4  The Model Is Saved
@@ -227,6 +330,10 @@ BEFORE YOU START — The Workflow
     After training, the model is automatically saved with your chosen name:
       models/activity_library1.pkl   — Activity classifier for "library1"
       models/toxicity_library1.pkl   — Toxicity classifier for "library1"
+
+    Each saved model also stores its training-time preprocessing
+    (calibration settings + descriptor medians) so predictions are always
+    consistent with how the model was trained.
 
     You can train MULTIPLE models with different names — they won't
     overwrite each other. Only training with the SAME name overwrites.
@@ -349,6 +456,11 @@ BEFORE YOU START — The Workflow
     │    0.5-0.75 = Moderate confidence                               │
     │    < 0.5   = Low confidence (close to random)                   │
     │                                                                 │
+    │  Scores are CALIBRATED probabilities — they can be compared     │
+    │  directly across compounds (e.g., 0.9 really is twice as likely │
+    │  as 0.45). Raw Random Forest scores used to cluster near 0/1;  │
+    │  the app now calibrates them so the numbers are honest.        │
+    │                                                                 │
     │  EXAMPLE:                                                        │
     │    Activity_Score = 0.92  → Very likely ACTIVE against OXA-23   │
     │    Toxicity_Score  = 0.23  → Likely SAFE (low toxicity risk)    │
@@ -469,6 +581,20 @@ A: NO. This is a critical ML mistake. Always predict on NEW compounds
 Q: What does a score of 0.85 mean?
 A: The model is 85% confident in its prediction. Scores close to 0.5
    mean the model is unsure — treat these predictions with caution.
+   Because the model's probabilities are CALIBRATED, this percentage
+   is now trustworthy and can be compared across compounds.
+
+Q: What is probability calibration?
+A: Random Forest scores naturally bunch up near 0 or 1, which makes
+   them unreliable as percentages. The app calibrates them (isotonic or
+   sigmoid) so a score of 0.80 genuinely means "80% likely". This is
+   important when scores are combined into a ranking.
+
+Q: What is scaffold-aware splitting?
+A: Chemically similar compounds (same molecular scaffold) are kept on
+   the same side of the train/test split. This stops the model from
+   "cheating" by having a near-twin of a test compound in its training
+   data — giving you honest evaluation scores instead of inflated ones.
 
 Q: How many compounds do I need to train?
 A: Minimum 20-30 for basic functionality. 100+ for reliable results.
@@ -502,6 +628,11 @@ A: YES. The training results page shows a "Training Dataset" table
 Q: Are my uploaded files saved permanently?
 A: No. They're auto-cleaned after 24 hours. Trained models (.pkl files)
    are kept until you overwrite or delete them.
+
+Q: Who can delete a trained model?
+A: Only the OWNER (the user who trained it) or an ADMIN. Other users see
+   a "Owner only" lock on models they don't own. The "default" and
+   "legacy" starter models are protected (admin-only deletion).
 
 Q: Can I train a model for something other than Activity/Toxicity?
 A: YES. Put your label in ANY column (e.g., "Flavonoid_Label"), type

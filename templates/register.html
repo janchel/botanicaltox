@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Register — BotanicalTox{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header text-center">
+                <i class="bi bi-flower1" style="font-size: 1.5rem; color: var(--primary);"></i>
+                <h4 class="mb-0 mt-2">BotanicalTox</h4>
+                <p class="text-muted small mb-0">Create a new account</p>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="username" class="form-label fw-semibold">
+                            <i class="bi bi-person"></i> Username
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username"
+                               placeholder="Choose a username" required autofocus
+                               value="{{ request.form.username if request.method == 'POST' else '' }}">
+                        <div class="form-text">Letters, numbers, and underscores only.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label fw-semibold">
+                            <i class="bi bi-lock"></i> Password
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password"
+                               placeholder="Create a password" required minlength="6">
+                        <div class="form-text">At least 6 characters.</div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="confirm" class="form-label fw-semibold">
+                            <i class="bi bi-lock-fill"></i> Confirm Password
+                        </label>
+                        <input type="password" class="form-control" id="confirm" name="confirm"
+                               placeholder="Confirm your password" required>
+                    </div>
+
+                    <div class="alert alert-warning py-2 small">
+                        <i class="bi bi-hourglass-split"></i>
+                        New accounts require <strong>admin approval</strong> before you can log in.
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-person-plus"></i> Create Account
+                        </button>
+                    </div>
+                </form>
+
+                <div class="text-center mt-4">
+                    <p class="text-muted small mb-0">
+                        Already have an account?
+                        <a href="{{ url_for('login') }}" class="fw-semibold">Sign In</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

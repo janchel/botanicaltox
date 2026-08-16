@@ -1,20 +1,29 @@
 """
 app.py — Flask Web Application
 ===============================
-Web interface for the Drug AI ML pipeline. Students can:
+Web interface for the BotanicalTox ML pipeline. Students can:
   - Upload training data (CSV) → train models → view graphs & metrics
   - Upload prediction data (CSV) → get predictions → download results
 
 Run:
     python3 app.py
-    Then open http://localhost:5000 in a browser.
+    Then open http://localhost:5001 in a browser.
 """
 
 import io
 import os
+import json
 import uuid
+import functools
 from pathlib import Path
 from datetime import datetime
+
+# Load .env file if present (python-dotenv is optional — falls back to env vars)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 import matplotlib
 matplotlib.use("Agg")
@@ -28,6 +37,10 @@ from flask import (
     flash, send_file, session, jsonify, Response, stream_with_context,
 )
 from werkzeug.utils import secure_filename
+from flask_login import (
+    LoginManager, UserMixin, login_user, logout_user,
+    login_required, current_user
+)
 
 # ── Import our ML modules ───────────────────────────────────────────────────
 from rdkit import Chem
@@ -37,25 +50,67 @@ from extract_features import (
     create_molecules,
     compute_all_rdkit_descriptors,
     compute_topological_indices,
+    clean_descriptor_matrix,
+    scaffold_id,
 )
 from train_common import (
     load_features_and_labels,
     train_random_forest,
     evaluate_model,
     save_model,
+    save_model_with_metadata,
+    align_features_for_model,
+    calibrated_estimator,
 )
 from ai_explainer import is_available as ai_is_available, explain_stream
 from plant_predict import search_plant_compounds, search_by_species_and_activity
 
+# ── Import database module ──────────────────────────────────────────────────
+from database import init_db, close_db, create_default_admin, User
+
 # ── App Setup ───────────────────────────────────────────────────────────────
 
-app = Flask(__name__)
-app.secret_key = "drug-ai-2026-secret-key-change-in-production"
+app = Flask(__name__, instance_relative_config=True)
+app.secret_key = os.environ.get("SECRET_KEY", "botanicaltox-2026-secret-key-change-in-production")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB max upload
 app.config["UPLOAD_FOLDER"] = Path(__file__).resolve().parent / "uploads"
 app.config["MODEL_FOLDER"] = Path(__file__).resolve().parent / "models"
 app.config["OUTPUT_FOLDER"] = Path(__file__).resolve().parent / "outputs"
 app.config["SESSION_FOLDER"] = Path(__file__).resolve().parent / "sessions"
+app.config["AVATAR_FOLDER"] = Path(app.instance_path) / "avatars"
+
+for folder in ["UPLOAD_FOLDER", "MODEL_FOLDER", "OUTPUT_FOLDER", "SESSION_FOLDER", "AVATAR_FOLDER"]:
+    app.config[folder].mkdir(parents=True, exist_ok=True)
+
+# ── Flask-Login Setup ───────────────────────────────────────────────────────
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Please log in to access this page."
+login_manager.login_message_category = "info"
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.get(int(user_id))
+
+# Initialize database and create default admin
+with app.app_context():
+    init_db()
+    create_default_admin()
+
+# Register database teardown
+app.teardown_appcontext(close_db)
+
+@app.context_processor
+def inject_global_template_vars():
+    """Make admin-facing counts available to every template."""
+    pending_count = None
+    try:
+        if current_user.is_authenticated and current_user.role == "admin":
+            pending_count = User.count_pending()
+    except Exception:
+        pending_count = None
+    return {"pending_count": pending_count}
 
 for folder in ["UPLOAD_FOLDER", "MODEL_FOLDER", "OUTPUT_FOLDER", "SESSION_FOLDER"]:
     app.config[folder].mkdir(parents=True, exist_ok=True)
@@ -147,6 +202,56 @@ def list_available_models() -> dict:
     return models
 
 
+# ── Model ownership tracking ────────────────────────────────────────────────
+
+MODEL_OWNERS_FILE = "owners.json"
+PROTECTED_MODELS = {"default", "legacy"}
+
+
+def get_model_owners() -> dict:
+    """Load {model_name: owner_username} from models/owners.json."""
+    path = app.config["MODEL_FOLDER"] / MODEL_OWNERS_FILE
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_model_owner(model_name: str, owner: str):
+    """Record who owns a trained model in models/owners.json."""
+    path = app.config["MODEL_FOLDER"] / MODEL_OWNERS_FILE
+    owners = get_model_owners()
+    owners[model_name] = owner
+    with open(path, "w") as f:
+        json.dump(owners, f, indent=2)
+
+
+def model_owner(model_name: str) -> str:
+    """Return the owner username for a model.
+
+    Models without recorded ownership are attributed to 'admin'
+    (pre-existing / starter models), so regular users can't delete them.
+    """
+    owners = get_model_owners()
+    return owners.get(model_name, "admin")
+
+
+def can_delete_model(model_name: str, user) -> bool:
+    """Whether a user may delete a given model.
+
+    Admins can delete anything. Regular users can only delete their own,
+    non-protected models.
+    """
+    if user.role == "admin":
+        return True
+    if model_name.lower() in PROTECTED_MODELS:
+        return False
+    return model_owner(model_name) == user.username
+
+
 def classify_compound(mol) -> str:
     """Classify a molecule into chemical categories from its structure."""
     if mol is None:
@@ -199,18 +304,311 @@ def classify_compound(mol) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  AUTH ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def admin_required(f):
+    """Decorator — restrict a route to admin users."""
+    @functools.wraps(f)
+    def wrapped(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return login_manager.unauthorized()
+        if current_user.role != "admin":
+            flash("You do not have permission to access this page.", "error")
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return wrapped
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """User login page."""
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        if not username or not password:
+            flash("Please enter both username and password.", "error")
+            return render_template("login.html")
+
+        user = User.get_by_username(username)
+        if user and user.check_password(password):
+            if not user.approved:
+                flash(
+                    "Your account is pending admin approval. "
+                    "You will be able to log in once an administrator approves your registration.",
+                    "info"
+                )
+                return render_template("login.html")
+            login_user(user)
+            flash(f"Welcome back, {username}!", "success")
+            next_page = request.args.get("next")
+            return redirect(next_page or url_for("index"))
+        else:
+            flash("Invalid username or password.", "error")
+
+    return render_template("login.html")
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    """User registration page. New accounts require admin approval."""
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+
+        if not username or not password:
+            flash("Please enter both username and password.", "error")
+            return render_template("register.html")
+
+        if password != confirm:
+            flash("Passwords do not match.", "error")
+            return render_template("register.html")
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters.", "error")
+            return render_template("register.html")
+
+        try:
+            # Self-registered users are created as pending (approved=False)
+            user = User.create(username, password, role="user", approved=False)
+            flash(
+                "Registration submitted! An administrator must approve your account "
+                "before you can log in.",
+                "success"
+            )
+            return redirect(url_for("login"))
+        except ValueError as e:
+            flash(str(e), "error")
+
+    return render_template("register.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    """Log out the current user."""
+    logout_user()
+    flash("You have been logged out.", "info")
+    return redirect(url_for("login"))
+
+
+# ── ADMIN — USER MANAGEMENT ─────────────────────────────────────────────────
+
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    """Admin page: list all users and manage approvals."""
+    users = User.list_all()
+    pending_count = User.count_pending()
+    return render_template(
+        "admin_users.html",
+        users=users,
+        pending_count=pending_count,
+        current_uid=current_user.id,
+    )
+
+
+@app.route("/admin/users/<int:user_id>/approve", methods=["POST"])
+@admin_required
+def admin_approve_user(user_id):
+    """Approve a pending user registration."""
+    if user_id == current_user.id:
+        flash("You cannot approve your own account.", "error")
+        return redirect(url_for("admin_users"))
+    User.set_approved(user_id, True)
+    flash(f"User #{user_id} approved.", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/reject", methods=["POST"])
+@admin_required
+def admin_reject_user(user_id):
+    """Reject / suspend a user (sets approved=False)."""
+    if user_id == current_user.id:
+        flash("You cannot reject your own account.", "error")
+        return redirect(url_for("admin_users"))
+    User.set_approved(user_id, False)
+    flash(f"User #{user_id} rejected.", "info")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_user(user_id):
+    """Delete a user account."""
+    if user_id == current_user.id:
+        flash("You cannot delete your own account.", "error")
+        return redirect(url_for("admin_users"))
+    User.delete(user_id)
+    flash(f"User #{user_id} deleted.", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/team", methods=["POST"])
+@admin_required
+def admin_toggle_team(user_id):
+    """Toggle whether a user is shown on the public Team page."""
+    if user_id == current_user.id:
+        flash("You cannot change your own team membership.", "error")
+        return redirect(url_for("admin_users"))
+    user = User.get(user_id)
+    if not user:
+        flash("User not found.", "error")
+        return redirect(url_for("admin_users"))
+    User.set_team(user_id, not user.is_team)
+    action = "added to" if not user.is_team else "removed from"
+    flash(f"'{user.username}' {action} the team.", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:user_id>/role/<role>", methods=["POST"])
+@admin_required
+def admin_set_role(user_id, role):
+    """Promote a user to admin, or demote an admin back to user.
+
+    Admins can approve/reject registered users and manage the site.
+    """
+    if role not in ("admin", "user"):
+        flash("Invalid role.", "error")
+        return redirect(url_for("admin_users"))
+    if user_id == current_user.id:
+        flash("You cannot change your own role.", "error")
+        return redirect(url_for("admin_users"))
+
+    target = User.get(user_id)
+    if not target:
+        flash("User not found.", "error")
+        return redirect(url_for("admin_users"))
+
+    if target.role == role:
+        flash(f"'{target.username}' already has the '{role}' role.", "info")
+        return redirect(url_for("admin_users"))
+
+    # Prevent demoting the last remaining admin (avoid lockout)
+    if target.role == "admin" and role == "user" and User.count_admins() <= 1:
+        flash("Cannot demote the last remaining admin.", "error")
+        return redirect(url_for("admin_users"))
+
+    User.set_role(user_id, role)
+    action = "promoted to admin" if role == "admin" else "demoted to user"
+    flash(f"'{target.username}' was {action}.", "success")
+    return redirect(url_for("admin_users"))
+
+
+# ── TEAM PAGE & PROFILES ───────────────────────────────────────────────────
+
+@app.route("/team")
+def team():
+    """Public page showing the student team members and their profiles."""
+    members = User.list_team()
+    return render_template("team.html", members=members)
+
+
+@app.route("/profile", methods=["POST"])
+@login_required
+def update_profile():
+    """Update the current user's profile (name, course, bio, avatar)."""
+    full_name = request.form.get("full_name", "").strip()
+    course = request.form.get("course", "").strip()
+    bio = request.form.get("bio", "").strip()
+
+    avatar_file = request.files.get("avatar")
+    avatar_name = current_user.avatar  # keep existing by default
+
+    if avatar_file and avatar_file.filename:
+        if not allowed_image(avatar_file.filename):
+            flash("Please upload an image file (PNG, JPG, GIF, or WebP).", "error")
+            return redirect(url_for("settings"))
+        # Secure filename + save as <user_id><ext> in the avatars folder
+        ext = Path(avatar_file.filename).suffix.lower()
+        avatar_name = f"user{current_user.id}{ext}"
+        avatar_path = app.config["AVATAR_FOLDER"] / avatar_name
+        # Remove any old avatar with a different extension
+        for old in app.config["AVATAR_FOLDER"].glob(f"user{current_user.id}.*"):
+            if old.name != avatar_name:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+        avatar_file.save(str(avatar_path))
+
+    User.update_profile(current_user.id, full_name=full_name, course=course,
+                        bio=bio, avatar=avatar_name)
+    flash("Profile updated successfully!", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/change-password", methods=["POST"])
+@login_required
+def change_password():
+    """Let the current user change their own password."""
+    current = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm = request.form.get("confirm_password", "")
+
+    if not current or not new_password:
+        flash("Please fill in all password fields.", "error")
+        return redirect(url_for("settings"))
+
+    if new_password != confirm:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("settings"))
+
+    if len(new_password) < 6:
+        flash("New password must be at least 6 characters.", "error")
+        return redirect(url_for("settings"))
+
+    # Verify the current password before changing it
+    user = User.get_by_username(current_user.username)
+    if not user or not user.check_password(current):
+        flash("Your current password is incorrect.", "error")
+        return redirect(url_for("settings"))
+
+    User.change_password(current_user.id, new_password)
+    flash("Password changed successfully!", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/avatar/<int:user_id>")
+def avatar(user_id):
+    """Serve a user's avatar image, or a 204 if none exists."""
+    user = User.get(user_id)
+    if not user or not user.avatar:
+        return "", 204
+    path = app.config["AVATAR_FOLDER"] / user.avatar
+    if not path.exists():
+        return "", 204
+    return send_file(path)
+
+
+def allowed_image(filename: str) -> bool:
+    """Check if a filename has an allowed image extension."""
+    return "." in filename and \
+        filename.rsplit(".", 1)[1].lower() in {"png", "jpg", "jpeg", "gif", "webp"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/")
 def index():
-    """Landing page — choose Train or Predict."""
+    """Landing page — public. No login required to view."""
     return render_template("index.html")
 
 
 # ── TRAIN ROUTE ─────────────────────────────────────────────────────────────
 
 @app.route("/train", methods=["GET", "POST"])
+@login_required
 def train():
     """
     GET:  Show the training upload form.
@@ -302,16 +700,28 @@ def train():
         desc_df = compute_all_rdkit_descriptors(mol_list)
         topo_df = compute_topological_indices(mol_list)
 
+        # ── Robust cleaning (notebook-inspired): median imputation, keep
+        #    stable columns, and reuse these at prediction time ──
+        feat_all = pd.concat([desc_df, topo_df], axis=1)
+        feat_clean, descriptor_cols, impute_medians = clean_descriptor_matrix(
+            feat_all, feat_all.columns
+        )
+
         # Combine — keep label columns in the saved file for load_features_and_labels
         meta_cols = {"Compound_ID", "Name", "Smiles", "mol"}
         keep_cols = [c for c in df.columns if c not in meta_cols]
         feats = pd.concat(
-            [df[keep_cols].reset_index(drop=True), desc_df, topo_df], axis=1
+            [df[keep_cols].reset_index(drop=True), feat_clean], axis=1
         )
 
         # Save features (includes label columns for load_features_and_labels)
         features_path = sess_dir / "features.csv"
         feats.to_csv(features_path, index=False)
+
+        # ── Scaffold groups for leakage-free splitting ──
+        scaffold_groups = df[smiles_col].apply(scaffold_id).reset_index(drop=True)
+        if scaffold_groups.isna().any():
+            scaffold_groups = None  # can't group reliably → fall back to random split
 
         # 2. Train selected tasks
         model_name = request.form.get("model_name", "default").strip().lower()
@@ -337,6 +747,7 @@ def train():
             X, y = load_features_and_labels(str(features_path), label_col)
             model, best_params, splits = train_random_forest(
                 X, y, random_state=42, tune=tune, n_iter=30 if tune else 0,
+                groups=scaffold_groups,
             )
             X_train, X_test, y_train, y_test = splits
 
@@ -376,7 +787,7 @@ def train():
             all_graphs[f"cm_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
             # Feature Importance
-            importances = model.feature_importances_
+            importances = calibrated_estimator(model).feature_importances_
             idx = np.argsort(importances)[::-1][:15]
             fig, ax = plt.subplots(figsize=(7, 5))
             ax.barh(range(len(idx)), importances[idx][::-1], align="center", color="steelblue")
@@ -410,13 +821,15 @@ def train():
                 all_graphs[f"topo_data_{task_key}"] = {k: round(v, 6) for k, v in topo_imps.items()}
                 plt.close(fig)
 
-            # Save model
+            # Save model (with training-time cleaning metadata)
             model_path = sess_dir / f"{task_key}_model.pkl"
-            save_model(model, str(model_path))
+            save_model_with_metadata(model, str(model_path), descriptor_cols, impute_medians)
             shared_path = app.config["MODEL_FOLDER"] / f"{task_key}_{model_name}.pkl"
             if shared_path.exists():
                 overwritten = True
-            save_model(model, str(shared_path))
+            save_model_with_metadata(model, str(shared_path), descriptor_cols, impute_medians)
+            # Record who owns this shared model
+            save_model_owner(model_name, current_user.username)
 
             if tune and best_params:
                 all_best_params[task_key] = best_params
@@ -433,7 +846,7 @@ def train():
             all_graphs=all_graphs,
             all_best_params=all_best_params if tune else None,
             n_samples=len(df),
-            n_features=desc_df.shape[1] + topo_df.shape[1],
+            n_features=len(descriptor_cols),
             tune=tune,
             model_name=model_name,
             dataset_preview=dataset_preview,
@@ -455,6 +868,7 @@ def train():
 # ── PREDICT ROUTE ───────────────────────────────────────────────────────────
 
 @app.route("/predict", methods=["GET", "POST"])
+@login_required
 def predict():
     """
     GET:  Show the prediction upload form.
@@ -549,11 +963,7 @@ def predict():
                 act_path = app.config["MODEL_FOLDER"] / "activity.pkl"
             if act_path.exists():
                 act_model = joblib.load(act_path)
-                try:
-                    expected = act_model.feature_names_in_
-                    X_aligned = X.reindex(columns=expected, fill_value=0)
-                except Exception:
-                    X_aligned = X
+                X_aligned = align_features_for_model(X, act_model)
                 results["Activity_Prediction"] = act_model.predict(X_aligned)
                 try:
                     results["Activity_Score"] = act_model.predict_proba(X_aligned)[:, 1].round(4)
@@ -577,11 +987,7 @@ def predict():
                 tox_path = app.config["MODEL_FOLDER"] / "toxicity.pkl"
             if tox_path.exists():
                 tox_model = joblib.load(tox_path)
-                try:
-                    expected = tox_model.feature_names_in_
-                    X_aligned = X.reindex(columns=expected, fill_value=0)
-                except Exception:
-                    X_aligned = X
+                X_aligned = align_features_for_model(X, tox_model)
                 results["Toxicity_Prediction"] = tox_model.predict(X_aligned)
                 try:
                     results["Toxicity_Score"] = tox_model.predict_proba(X_aligned)[:, 1].round(4)
@@ -655,8 +1061,8 @@ def predict():
             if act_path.exists():
                 act_model = joblib.load(act_path)
                 try:
-                    feature_names = act_model.feature_names_in_
-                    importances = act_model.feature_importances_
+                    feature_names = getattr(act_model, "_descriptor_cols", None) or act_model.feature_names_in_
+                    importances = calibrated_estimator(act_model).feature_importances_
                     top_idx = np.argsort(importances)[::-1][:5]
                     prediction_summary["top_features"] = [
                         {"feature": str(feature_names[i]), "importance": round(float(importances[i]), 4)}
@@ -694,6 +1100,7 @@ def predict():
 # ── PLANT PREDICT ROUTE ────────────────────────────────────────────────────
 
 @app.route("/plant", methods=["GET", "POST"])
+@login_required
 def plant():
     """
     GET:  Show the plant upload form (photo + name).
@@ -787,11 +1194,7 @@ def plant():
             act_path = app.config["MODEL_FOLDER"] / "activity.pkl"
         if act_path.exists():
             act_model = joblib.load(act_path)
-            try:
-                expected = act_model.feature_names_in_
-                X_aligned = X.reindex(columns=expected, fill_value=0)
-            except Exception:
-                X_aligned = X
+            X_aligned = align_features_for_model(X, act_model)
             results["Activity_Prediction"] = act_model.predict(X_aligned)
             try:
                 results["Activity_Score"] = act_model.predict_proba(X_aligned)[:, 1].round(4)
@@ -804,11 +1207,7 @@ def plant():
             tox_path = app.config["MODEL_FOLDER"] / "toxicity.pkl"
         if tox_path.exists():
             tox_model = joblib.load(tox_path)
-            try:
-                expected = tox_model.feature_names_in_
-                X_aligned = X.reindex(columns=expected, fill_value=0)
-            except Exception:
-                X_aligned = X
+            X_aligned = align_features_for_model(X, tox_model)
             results["Toxicity_Prediction"] = tox_model.predict(X_aligned)
             try:
                 results["Toxicity_Score"] = tox_model.predict_proba(X_aligned)[:, 1].round(4)
@@ -884,6 +1283,7 @@ def plant():
 # ── RANKING ROUTE — Top Compounds ─────────────────────────────────────────
 
 @app.route("/ranking", methods=["GET", "POST"])
+@login_required
 def ranking():
     """
     GET:  Show ranking upload form.
@@ -973,10 +1373,7 @@ def ranking():
             act_path = app.config["MODEL_FOLDER"] / "activity.pkl"
         if act_path.exists():
             act_model = joblib.load(act_path)
-            try:
-                Xa = X.reindex(columns=act_model.feature_names_in_, fill_value=0)
-            except Exception:
-                Xa = X
+            Xa = align_features_for_model(X, act_model)
             results["Activity_Prediction"] = act_model.predict(Xa)
             try:
                 results["Activity_Score"] = act_model.predict_proba(Xa)[:, 1].round(4)
@@ -990,10 +1387,7 @@ def ranking():
             tox_path = app.config["MODEL_FOLDER"] / "toxicity.pkl"
         if tox_path.exists():
             tox_model = joblib.load(tox_path)
-            try:
-                Xt = X.reindex(columns=tox_model.feature_names_in_, fill_value=0)
-            except Exception:
-                Xt = X
+            Xt = align_features_for_model(X, tox_model)
             results["Toxicity_Prediction"] = tox_model.predict(Xt)
             try:
                 results["Toxicity_Score"] = tox_model.predict_proba(Xt)[:, 1].round(4)
@@ -1065,13 +1459,16 @@ def ranking():
 # ── SETTINGS ROUTE — Manage Trained Models ─────────────────────────────────
 
 @app.route("/settings")
+@login_required
 def settings():
     """Show all trained models with option to delete."""
     models = list_available_models()
-    # Get file sizes
+    # Get file sizes + ownership info
     model_info = {}
     for name, paths in models.items():
-        info = {"name": name, "tasks": {}}
+        info = {"name": name, "tasks": {}, "owner": model_owner(name),
+                "can_delete": can_delete_model(name, current_user),
+                "protected": name.lower() in PROTECTED_MODELS}
         for task, path_str in paths.items():
             p = Path(path_str)
             size_kb = p.stat().st_size / 1024 if p.exists() else 0
@@ -1081,12 +1478,18 @@ def settings():
 
 
 @app.route("/delete/<model_name>", methods=["POST"])
+@login_required
 def delete_model(model_name):
-    """Delete both activity and toxicity models for a given name."""
-    # Protect default and legacy models
-    protected = {"default", "legacy"}
-    if model_name.lower() in protected:
-        flash(f"Cannot delete the '{model_name}' model. It is protected.", "error")
+    """Delete both activity and toxicity models for a given name.
+
+    Only the model's owner or an admin may delete it.
+    """
+    # Permission check (owner or admin; protected models are admin-only)
+    if not can_delete_model(model_name, current_user):
+        if model_name.lower() in PROTECTED_MODELS:
+            flash(f"Cannot delete the '{model_name}' model. It is protected.", "error")
+        else:
+            flash("You can only delete your own trained models.", "error")
         return redirect(url_for("settings"))
 
     model_dir = app.config["MODEL_FOLDER"]
@@ -1098,6 +1501,12 @@ def delete_model(model_name):
             deleted.append(path.name)
     if deleted:
         flash(f"Deleted: {', '.join(deleted)}", "success")
+        # Clean up ownership record
+        owners = get_model_owners()
+        if model_name in owners:
+            del owners[model_name]
+            with open(model_dir / MODEL_OWNERS_FILE, "w") as f:
+                json.dump(owners, f, indent=2)
     else:
         flash(f"No models found for '{model_name}'.", "error")
     return redirect(url_for("settings"))
@@ -1106,6 +1515,7 @@ def delete_model(model_name):
 # ── AI EXPLAIN ENDPOINT (SSE Streaming) ────────────────────────────────────
 
 @app.route("/explain", methods=["GET"])
+@login_required
 def explain():
     """
     Stream an AI-generated explanation of the last prediction results.
@@ -1136,6 +1546,7 @@ def explain():
 # ── DOWNLOAD ROUTE ──────────────────────────────────────────────────────────
 
 @app.route("/download/<session_id>/<filename>")
+@login_required
 def download(session_id, filename):
     """Serve a result file for download."""
     path = app.config["SESSION_FOLDER"] / session_id / secure_filename(filename)
@@ -1151,7 +1562,7 @@ def download(session_id, filename):
 
 if __name__ == "__main__":
     print("\n" + "=" * 55)
-    print("  🧪  Drug AI — Web Interface")
-    print("  Open:  http://localhost:5000")
+    print("  🌿  BotanicalTox — Web Interface")
+    print("  Open:  http://localhost:5001")
     print("=" * 55 + "\n")
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)

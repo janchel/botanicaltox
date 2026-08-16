@@ -1,6 +1,6 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║     Drug AI — DEPLOYMENT GUIDE                                              ║
+║     BotanicalTox — DEPLOYMENT GUIDE                                              ║
 ║     GitHub Push & Fresh Machine Setup                                        ║
 ║     August 2026                                                              ║
 ║                                                                              ║
@@ -16,6 +16,7 @@
 
     Core Application:
       app.py                       Flask web server (main entry)
+      database.py                  SQLite user database & auth helpers
       ai_explainer.py              AI explanation module
       extract_features.py          SMILES → RDKit descriptors
       train_common.py              Shared training / evaluation logic
@@ -25,10 +26,18 @@
       predict.py                   CLI prediction
       plant_predict.py             Plant compound lookup database
       requirements.txt             Python dependencies
+      run.sh                       Launcher (uses venv automatically)
+      README.md                    Project overview
+      CHANGELOG_2026-08-16.md      Change log / tracing
+      .env.example                 Template for environment configuration
 
-    Templates (10 files):
+    Templates (13 files):
       templates/base.html
       templates/index.html
+      templates/login.html
+      templates/register.html
+      templates/admin_users.html
+      templates/team.html
       templates/train.html
       templates/train_result.html
       templates/predict.html
@@ -66,7 +75,13 @@
 ────────────────────────────────────────────
 
     Secrets:
-      .env                         Contains API keys — NEVER commit
+      .env                         Contains API keys & secret key — NEVER commit
+
+    User Database:
+      instance/                    Flask instance folder (SQLite users.db)
+
+    Virtual Environment:
+      venv/                        Local Python environment
 
     Runtime / Cache:
       __pycache__/                 Python bytecode cache
@@ -80,6 +95,8 @@
       datasets/medchem_features.csv Auto-generated descriptors
       datasets/dup_test.csv        Test artifact
       models/*.pkl                 Too many test models — keep 0-2 max
+      models/owners.json           Runtime-generated model ownership map
+                                    (rebuilt automatically when models train)
 
     OS Files:
       ._*                          macOS resource forks
@@ -91,11 +108,20 @@
 
     # Secrets
     .env
+    .env.*
+    !.env.example
 
     # Python
     __pycache__/
     *.pyc
     *.pyo
+
+    # Virtual environment
+    venv/
+    .venv/
+
+    # Flask instance folder (contains SQLite user database)
+    instance/
 
     # Runtime
     sessions/
@@ -129,7 +155,7 @@
     • Python:        3.10 or newer
     • RAM:           2 GB minimum, 4 GB recommended
     • Disk:          1 GB free (app + dependencies + datasets)
-    • Network:       Port 5000 open for web access
+    • Network:       Port 5001 open for web access
 
 2.2  Python Packages
 ──────────────────────
@@ -147,6 +173,7 @@
     │ openpyxl      │ Excel file support                   │
     │ joblib        │ Model save/load                      │
     │ flask         │ Web framework                        │
+    │ flask-login   │ User authentication & sessions       │
     │ gunicorn      │ Production WSGI server               │
     │ openai        │ AI explainer client                  │
 
@@ -197,31 +224,72 @@
     # models/ must exist (place .pkl files here)
     # uploads/ and sessions/ are auto-created at runtime
     # outputs/ for CLI-generated graphs and reports
+    # instance/ is auto-created for the SQLite user database
 
-3.5  Configure AI Explanation (Optional)
+3.5  Configure Security & AI Explanation
 ──────────────────────────────────────────
 
     cp .env.example .env
-    nano .env                          # Add your AI_API_KEY
+    nano .env
 
-    Or skip — the app works without it.
+      # Required for production — generate a strong secret key:
+      #   python -c "import secrets; print(secrets.token_hex(32))"
+      SECRET_KEY=your-random-hex-string
+
+      # Default admin credentials (only used on first run):
+      ADMIN_USERNAME=admin
+      ADMIN_PASSWORD=choose-a-strong-password
+
+      # Optional: AI_API_KEY for AI explanations
+
+    ⚠️  The app works without a .env file, but uses insecure defaults.
+        The default admin is created as admin/admin123 on first launch.
 
 3.6  Start the Server
 ───────────────────────
 
-    # Development (single user):
+    # Easiest — launcher uses the venv automatically:
+    ./run.sh
+
+    # Development (single user) — use the venv:
+    source venv/bin/activate
     python3 app.py
 
-    # Production (multi-user):
-    gunicorn -w 4 -b 0.0.0.0:5000 app:app
+    # Or directly:
+    venv/bin/python app.py
 
-    # Open: http://localhost:5000
+    # Production (multi-user):
+    gunicorn -w 4 -b 0.0.0.0:5001 app:app
+
+    # Open: http://localhost:5001
+
+    ⚠️  New auth dependencies (flask-login, python-dotenv) must be installed.
+        If you get "ModuleNotFoundError: No module named 'flask_login'",
+        activate the venv (source venv/bin/activate) before running, or run
+        ./run.sh which picks the venv automatically.
 
 3.7  Verify Installation
 ──────────────────────────
 
-    curl http://localhost:5000/
-    # Should return the Drug AI homepage HTML
+    curl http://localhost:5001/
+    # Should return the public BotanicalTox homepage HTML
+
+    curl http://localhost:5001/train
+    # Should redirect (302) to /login?next=%2Ftrain for guests
+
+3.8  First Login & User Approval
+───────────────────────────────────
+
+    • Open http://localhost:5001/login
+    • Sign in with the default admin (admin / admin123) or the
+      ADMIN_USERNAME / ADMIN_PASSWORD from your .env file
+    • ⚠️  Change the admin password after first login
+
+    New user registrations require admin approval:
+    • Users click "Register" → their account is created as PENDING
+    • The admin sees a "Users" button in the navbar (with a count badge)
+    • Admin opens "Users" → clicks Approve to grant login access
+    • Admins can also Reject (suspend) or Delete accounts
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -235,26 +303,35 @@
 
     │ Variable       │ Default                          │ Purpose         │
     │────────────────│──────────────────────────────────│─────────────────│
-    │ AI_API_KEY     │ (none)                           │ AI explainer    │
-    │ AI_BASE_URL    │ https://ai.rebelstack.fun        │ AI endpoint     │
-    │ AI_MODEL       │ jandel/free                      │ AI model name   │
+4.1  Environment Variables (.env)
+─────────────────────────────────────
+
+    │ Variable        │ Default                          │ Purpose           │
+    │─────────────────│──────────────────────────────────│───────────────────│
+    │ SECRET_KEY      │ insecure built-in                │ Session signing   │
+    │ ADMIN_USERNAME  │ admin                            │ First admin user  │
+    │ ADMIN_PASSWORD  │ admin123                         │ First admin pass  │
+    │ AI_API_KEY      │ (none)                           │ AI explainer      │
+    │ AI_BASE_URL     │ https://ai.rebelstack.fun        │ AI endpoint       │
+    │ AI_MODEL        │ jandel/free                      │ AI model name     │
 
 4.2  App Settings (in app.py)
 ───────────────────────────────
 
     │ Setting                │ Default   │ Change For               │
     │────────────────────────│───────────│──────────────────────────│
-    │ Port                   │ 5000      │ Different port           │
+    │ Port                   │ 5001      │ Different port           │
     │ Debug Mode             │ True      │ Set False in production  │
-    │ Secret Key             │ Built-in  │ Change in production     │
+    │ Secret Key             │ Built-in  │ Set via .env (SECRET_KEY)│
     │ Max Upload Size        │ 50 MB     │ Larger datasets          │
     │ Session Cleanup        │ 24 hours  │ Change retention period  │
 
 4.3  Production Hardening
 ───────────────────────────
 
-    • Change app.secret_key to a random string
+    • Set SECRET_KEY in .env to a random string
     • Set debug=False in app.run()
+    • Change the default admin password immediately after first login
     • Use gunicorn instead of Flask dev server
     • Put behind nginx reverse proxy
     • Set up SSL with Let's Encrypt
@@ -305,7 +382,7 @@
         └── README.md                ← "Place trained .pkl files here"
 
     NOT pushed (in .gitignore):
-      .env  sessions/  uploads/  outputs/  __pycache__/  *.pyc
+      .env  instance/  venv/  sessions/  uploads/  outputs/  __pycache__/  *.pyc
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -318,9 +395,10 @@
     [ ] pip install -r requirements.txt
     [ ] pip install "numpy<2"
     [ ] mkdir -p models uploads sessions
-    [ ] (Optional) cp .env.example .env and add keys
+    [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
     [ ] python3 app.py
-    [ ] Open http://localhost:5000
+    [ ] Open http://localhost:5001 → login with admin / admin123
+    [ ] Change the admin password after first login
     [ ] Upload datasets/medchem_training.csv → Train → Predict
 
 ═══════════════════════════════════════════════════════════════════════════════
