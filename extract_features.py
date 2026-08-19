@@ -13,9 +13,16 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 import warnings
 from pathlib import Path
+
+# Cap BLAS/OpenMP threads before numpy/rdkit import (see app.py for why).
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 import numpy as np
 import pandas as pd
@@ -77,16 +84,40 @@ def create_molecules(smiles_series: pd.Series) -> list:
 
 
 def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
-    """Compute all ~210 RDKit molecular descriptors."""
+    """Compute all ~210 RDKit molecular descriptors, fault-tolerantly.
+
+    Some RDKit descriptors (e.g. MaxEStateIndex / EStateIndices) can raise
+    for particular molecules (overflow). One bad molecule used to crash the
+    whole batch (and the request). Now each molecule is guarded:
+      - fast path: compute all descriptors at once;
+      - on failure: recompute descriptor-by-descriptor, skipping any that
+        raise and leaving a NaN for that cell (later imputed/cleaned).
+    """
     descriptor_names = [x[0] for x in Descriptors._descList]
+    descriptor_fns = dict(Descriptors._descList)
     calculator = MoleculeDescriptors.MolecularDescriptorCalculator(descriptor_names)
+
+    def _safe_row(mol):
+        try:
+            return list(calculator.CalcDescriptors(mol))
+        except Exception:
+            pass
+        # Fallback: one descriptor at a time so a single failure can't
+        # wipe out the whole molecule's features.
+        row = []
+        for name in descriptor_names:
+            try:
+                row.append(descriptor_fns[name](mol))
+            except Exception:
+                row.append(np.nan)
+        return row
 
     values = []
     for mol in mol_list:
         if mol is None:
             values.append([np.nan] * len(descriptor_names))
         else:
-            values.append(list(calculator.CalcDescriptors(mol)))
+            values.append(_safe_row(mol))
 
     result = pd.DataFrame(values, columns=descriptor_names)
     # Clean inf/NaN values that break scikit-learn
