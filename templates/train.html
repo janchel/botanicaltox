@@ -22,7 +22,7 @@
                         </div>
                         <input type="file" name="dataset" id="fileInput" accept=".csv,.xlsx,.xls"
                                style="display:none" required
-                               onchange="document.getElementById('fileName').textContent = this.files[0]?.name || 'CSV or Excel (.xlsx) — Max 50 MB'">
+                               onchange="onFileSelected(this)">
                     </div>
 
                     <!-- Task Selection -->
@@ -133,7 +133,83 @@
 
 {% endblock %}
 {% block scripts %}
+<!-- Label Detection Modal -->
+<div class="modal fade" id="labelModal" tabindex="-1" aria-labelledby="labelModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:12px; border:none;">
+      <div class="modal-header" style="border-bottom:1px solid #e2e8f0;">
+        <h5 class="modal-title" id="labelModalLabel"><i class="bi bi-search me-2"></i>CSV Label Detection</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="labelModalBody"></div>
+      <div class="modal-footer" style="border-top:1px solid #e2e8f0;">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" id="labelModalOk">
+          <i class="bi bi-check-lg me-1"></i> Got it
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
+const LABELS = ['Activity_Label', 'Toxicity_Label'];
+const TASK_MAP = { Activity_Label: 'taskActivity', Toxicity_Label: 'taskToxicity' };
+
+function onFileSelected(input) {
+    const fileName = document.getElementById('fileName');
+    const file = input.files[0];
+    if (!file) { fileName.textContent = 'CSV or Excel (.xlsx) — Max 50 MB'; return; }
+    fileName.textContent = file.name;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+        fileName.textContent = file.name + ' (labels auto-detected on submit)';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const headerLine = e.target.result.split('\n')[0];
+        const cols = headerLine.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        const found = LABELS.filter(l => cols.includes(l));
+        const missing = LABELS.filter(l => !cols.includes(l));
+
+        if (found.length === 0) {
+            // No standard labels found — don't auto-adjust, let server handle custom labels
+            return;
+        }
+
+        // Auto-adjust checkboxes based on what's in the CSV
+        found.forEach(label => {
+            const cb = document.getElementById(TASK_MAP[label]);
+            if (cb && !cb.checked) cb.checked = true;
+        });
+        missing.forEach(label => {
+            const cb = document.getElementById(TASK_MAP[label]);
+            if (cb && cb.checked) cb.checked = false;
+        });
+
+        // Show modal if some tasks were auto-disabled
+        if (missing.length > 0 && missing.length < LABELS.length) {
+            const body = document.getElementById('labelModalBody');
+            const foundNames = found.map(l => `<span class="badge bg-success me-1"><i class="bi bi-check-circle"></i> ${l}</span>`).join(' ');
+            const missingNames = missing.map(l => `<span class="badge bg-secondary me-1"><i class="bi bi-x-circle"></i> ${l}</span>`).join(' ');
+            body.innerHTML = `
+                <p class="mb-2">Your CSV <strong>${file.name}</strong> contains:</p>
+                <p class="mb-3">${foundNames}</p>
+                <p class="mb-2">Missing (tasks auto-adjusted):</p>
+                <p class="mb-3">${missingNames}</p>
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    Only the <strong>${found.map(l => l.replace('_Label', '')).join(' & ')}</strong> task(s) will be trained.
+                    To train both, add the missing label column to your CSV.
+                </p>
+            `;
+            new bootstrap.Modal(document.getElementById('labelModal')).show();
+        }
+    };
+    reader.readAsText(file.slice(0, 2048));
+}
+
 // Drag & drop support
 const dropZone = document.getElementById('dropZone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#2563eb'; });
@@ -144,7 +220,7 @@ dropZone.addEventListener('drop', e => {
     const file = e.dataTransfer.files[0];
     if (file) {
         document.getElementById('fileInput').files = e.dataTransfer.files;
-        document.getElementById('fileName').textContent = file.name;
+        onFileSelected(document.getElementById('fileInput'));
     }
 });
 
