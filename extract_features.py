@@ -93,7 +93,14 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
       - on failure: recompute descriptor-by-descriptor, skipping any that
         raise and leaving a NaN for that cell (later imputed/cleaned).
     """
-    descriptor_names = [x[0] for x in Descriptors._descList]
+    _EXCLUDE_DESCRIPTORS = {
+        "BalabanJ",  # calls CharacteristicPolynomial → numpy.dot can SIGFPE
+        "Ipc",       # calls CharacteristicPolynomial → same crash
+        "AvgIpc",    # calls Ipc → same crash
+    }
+    descriptor_names = [
+        x[0] for x in Descriptors._descList if x[0] not in _EXCLUDE_DESCRIPTORS
+    ]
     descriptor_fns = dict(Descriptors._descList)
     calculator = MoleculeDescriptors.MolecularDescriptorCalculator(descriptor_names)
 

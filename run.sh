@@ -23,6 +23,8 @@ fi
 PORT="${PORT:-5001}"
 WORKERS="${WEB_CONCURRENCY:-2}"
 TIMEOUT="${GUNICORN_TIMEOUT:-300}"
+MAX_REQUESTS="${GUNICORN_MAX_REQUESTS:-2000}"
+MAX_REQUESTS_JITTER="${GUNICORN_MAX_REQUESTS_JITTER:-200}"
 
 if [ "$1" = "dev" ]; then
     echo "Starting BotanicalTox (dev server) on http://localhost:$PORT ..."
@@ -30,9 +32,15 @@ if [ "$1" = "dev" ]; then
 fi
 
 echo "Starting BotanicalTox (gunicorn) on 0.0.0.0:$PORT (workers=$WORKERS, timeout=${TIMEOUT}s) ..."
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
 exec "$PY" -m gunicorn \
     --workers "$WORKERS" \
     --timeout "$TIMEOUT" \
     --graceful-timeout 30 \
+    --max-requests "$MAX_REQUESTS" \
+    --max-requests-jitter "$MAX_REQUESTS_JITTER" \
     --bind "0.0.0.0:$PORT" \
     app:app

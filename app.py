@@ -736,6 +736,25 @@ def train():
         model_name = request.form.get("model_name", "default").strip().lower()
         model_name = "".join(c for c in model_name if c.isalnum() or c in "_-") or "default"
 
+        # Validate label columns exist in the uploaded CSV before training
+        available_cols = set(df.columns)
+        missing_labels = []
+        if train_activity:
+            act_label = request.form.get("label_col", "").strip() or "Activity_Label"
+            if act_label not in available_cols:
+                missing_labels.append(f"Activity_Label (needed for activity task)")
+        if train_toxicity:
+            tox_label = request.form.get("label_col", "").strip() or "Toxicity_Label"
+            if tox_label not in available_cols:
+                missing_labels.append(f"Toxicity_Label (needed for toxicity task)")
+        if missing_labels:
+            flash(
+                f"Missing label column(s): {', '.join(missing_labels)}. "
+                f"Available columns: {', '.join(sorted(available_cols))}",
+                "error"
+            )
+            return redirect(url_for("train"))
+
         tasks_to_train = []
         if train_activity:
             task_name = custom_task_name if custom_task_name else "activity"
@@ -808,7 +827,7 @@ def train():
             all_graphs[f"importance_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
             # Topological Indices
-            topo_indices = ["WienerIndex", "Zagreb_M1", "Zagreb_M2", "BalabanJ"]
+            topo_indices = ["WienerIndex", "Zagreb_M1", "Zagreb_M2"]
             topo_imps = {}
             for feat_name in topo_indices:
                 if feat_name in X.columns:
