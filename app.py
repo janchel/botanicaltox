@@ -18,6 +18,15 @@ import functools
 from pathlib import Path
 from datetime import datetime
 
+# ── Cap BLAS/OpenMP threads BEFORE numpy/rdkit are imported ────────────────
+# RDKit + numpy are not thread/fork-safe under gunicorn's workers. Letting
+# them spawn many threads inside forked workers causes random crashes (e.g.
+# "An = numpy.dot(A, Bn)" aborts) and slows down single training requests.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 # Load .env file if present (python-dotenv is optional — falls back to env vars)
 try:
     from dotenv import load_dotenv
