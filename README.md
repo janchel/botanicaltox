@@ -11,7 +11,7 @@ Built by **The Science and Technology Education Center (STEC) — Batch of 2027*
 - **Train ML models** — upload CSV/Excel with SMILES + labels, train Random Forest classifiers, view metrics, ROC curves, confusion matrices, and feature importance.
 - **Predict compounds** — upload SMILES and get instant activity & toxicity predictions (downloadable as CSV).
 - **Plant search** — enter a plant name; the app looks up its known compounds (PubChem) and predicts their properties.
-- **Rank compounds** — sort candidates by a combined activity–toxicity score.
+- **Rank compounds** — sort candidates by a priority score (Activity × Safety), so the top compounds are both likely active AND non-toxic.
 - **Team page** — public page showcasing student members with profiles and pictures.
 - **User accounts** — login/registration with **admin approval**, and admin **promote/demote** of other admins.
 - **Model ownership** — only the owner (or an admin) can delete a trained model.

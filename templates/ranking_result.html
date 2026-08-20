@@ -13,7 +13,7 @@
 </h2>
 <p class="text-muted">
     Model: {{ model_name | replace('_', ' ') | title }} ({{ tasks }}) &middot;
-    Sorted by Combined Score (Activity − Toxicity)
+    Sorted by Priority Score (Activity × Safety)
 </p>
 
 <!-- Molecule Structures -->
@@ -70,12 +70,14 @@
                             <span class="badge {% if row[col] == 1 %}badge-toxic{% else %}badge-safe{% endif %}">
                                 {{ 'Toxic' if row[col] == 1 else 'Safe' }}
                             </span>
-                        {% elif col == 'Combined_Score' %}
+                        {% elif col == 'Priority_Score' %}
                             <strong>
                                 <span class="{% if row[col] > 0.5 %}text-success{% elif row[col] > 0 %}text-warning{% else %}text-danger{% endif %}">
                                     {{ row[col] }}
                                 </span>
                             </strong>
+                        {% elif col == 'Safety_Score' %}
+                            <code>{{ row[col] }}</code>
                         {% elif col == 'Activity_Score' or col == 'Toxicity_Score' %}
                             <code>{{ row[col] }}</code>
                         {% elif col == 'Chemical_Class' %}
