@@ -66,11 +66,13 @@
             <div class="card-header"><i class="bi bi-info-circle"></i> How Ranking Works</div>
             <div class="card-body">
                 <p class="small text-muted mb-2">
-                    <strong>Combined Score = Activity_Score − Toxicity_Score</strong>
+                    <strong>Safety Score = 1 − Toxicity Score</strong><br>
+                    <strong>Priority Score = Activity Score × Safety Score</strong>
                 </p>
                 <ul class="small text-muted mb-0">
-                    <li>High activity + low toxicity = <strong>Best drug candidate</strong> (high score)</li>
-                    <li>Low activity + high toxicity = <strong>Worst candidate</strong> (low/negative score)</li>
+                    <li>A compound must be <strong>BOTH likely active AND likely non-toxic</strong> to rank high</li>
+                    <li>High activity + high safety = <strong>Best drug candidate</strong> (high score)</li>
+                    <li>High toxicity drags the whole score down (even if active)</li>
                     <li>Top 15 compounds are shown, sorted best → worst</li>
                 </ul>
             </div>

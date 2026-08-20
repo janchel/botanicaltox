@@ -1427,16 +1427,20 @@ def ranking():
             flash("No trained models found for the selected name.", "error")
             return redirect(url_for("ranking"))
 
-        # Combined score: Activity - Toxicity (high activity + low toxicity = best)
+        # Priority score (notebook-style): both active AND non-toxic to rank high
+        #   Safety  = 1 − Toxicity
+        #   Priority = Activity × Safety
         if "Activity_Score" in results.columns and "Toxicity_Score" in results.columns:
-            results["Combined_Score"] = (results["Activity_Score"] - results["Toxicity_Score"]).round(4)
-            sort_col = "Combined_Score"
+            results["Safety_Score"] = (1.0 - results["Toxicity_Score"]).round(4)
+            results["Priority_Score"] = (results["Activity_Score"] * results["Safety_Score"]).round(4)
+            sort_col = "Priority_Score"
         elif "Activity_Score" in results.columns:
-            results["Combined_Score"] = results["Activity_Score"]
-            sort_col = "Combined_Score"
+            results["Priority_Score"] = results["Activity_Score"].round(4)
+            sort_col = "Priority_Score"
         else:
-            results["Combined_Score"] = 1.0 - results["Toxicity_Score"]
-            sort_col = "Combined_Score"
+            results["Safety_Score"] = (1.0 - results["Toxicity_Score"]).round(4)
+            results["Priority_Score"] = results["Safety_Score"].round(4)
+            sort_col = "Priority_Score"
 
         # Sort and take top 15
         results = results.sort_values(sort_col, ascending=False).head(15).reset_index(drop=True)
@@ -1460,7 +1464,8 @@ def ranking():
                 mol_images.append({"id": cid, "image": img_b64})
 
         preview_cols = ["Compound_ID", smiles_col, "Chemical_Class", "Source_File"]
-        for c in ["Activity_Prediction", "Activity_Score", "Toxicity_Prediction", "Toxicity_Score", "Combined_Score"]:
+        for c in ["Activity_Prediction", "Activity_Score", "Toxicity_Prediction", "Toxicity_Score",
+                  "Safety_Score", "Priority_Score"]:
             if c in results.columns:
                 preview_cols.append(c)
         preview = results[preview_cols].head(15).to_dict(orient="records")
