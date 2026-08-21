@@ -9,6 +9,7 @@ Built by **The Science and Technology Education Center (STEC) — Batch of 2027*
 ## ✨ Features
 
 - **Train ML models** — upload CSV/Excel with SMILES + labels, train Random Forest classifiers, view metrics, ROC curves, confusion matrices, and feature importance.
+- **Export test results** — after training, download the held-out **test-set predictions** and a one-row **metrics summary** as CSV (mirrors the students' Colab notebook 1.6a/2.6a).
 - **Predict compounds** — upload SMILES and get instant activity & toxicity predictions (downloadable as CSV).
 - **Plant search** — enter a plant name; the app looks up its known compounds (PubChem) and predicts their properties.
 - **Rank compounds** — sort candidates by a priority score (Activity × Safety), so the top compounds are both likely active AND non-toxic.
@@ -95,6 +96,20 @@ Example training rows:
 
 ---
 
+## 📊 Student Research Datasets (`datasets/`)
+
+These are the actual datasets used by the STEC research notebook (`final_destination.ipynb`) — upload them directly in the **Train** page to reproduce the study's models:
+
+| File | Contents |
+|------|----------|
+| `toxicity_compounds.csv` | 1,156 FDA drug records (DILIst) — `Compound_ID, Smiles, Toxicity_Label` |
+| `_ACTIVITY__105_COMPOUNDS_FINAL_TRAINING.csv` | 105 compounds (30 active / 75 inactive) against OXA-family β-lactamases |
+| `prediction_compounds.xlsx` | 289-row flavonoid screening library (`Compound_ID, Smiles`) |
+
+After training on these, run a prediction on `prediction_compounds.xlsx` and view the **Rank** page for the `Priority = Activity × Safety` shortlist.
+
+---
+
 ## 🔐 Access Control
 
 | Action | Guest | User | Admin |
@@ -121,7 +136,7 @@ Example training rows:
 
 - Predictions are **computational** — always validate with experimental testing.
 - The AI explainer is optional; if no API key is set (or the network is unavailable) it is disabled gracefully.
-- `refinedd_code.ipynb` is an experimental research notebook (not part of the web app).
+- `refinedd_code.ipynb` and `final_destination.ipynb` are experimental research notebooks (not part of the web app). `final_destination.ipynb` is the students' reference implementation: crash-safe RDKit descriptors (excludes `BalabanJ`/`Ipc`/`AvgIpc`), scaffold-aware splitting, isotonic/sigmoid calibration, `Priority = Activity × Safety`, and test-set CSV exports. It reads its data from `datasets/` (or bare filenames, e.g. in Colab).
 
 ---
 

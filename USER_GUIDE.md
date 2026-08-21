@@ -342,6 +342,55 @@ BEFORE YOU START — The Workflow
     Just go straight to PREDICT and select your model from the dropdown.
 
 
+1.5  Download Test Results (CSV)
+──────────────────────────────────
+
+    On the training results page, each task now has two extra download buttons
+    (this mirrors the research notebook's 1.6a/2.6a exports):
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  ⬇️ TEST PREDICTIONS (CSV)                                      │
+    │                                                                 │
+    │  One row per compound in the held-out TEST set:                 │
+    │     Compound_ID · Smiles · True_Label                           │
+    │     Predicted_Label · Predicted_Proba                           │
+    │                                                                 │
+    │  Perfect for error analysis and your Chapter IV appendix —      │
+    │  which test compounds did the model get wrong, and why?         │
+    └─────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  ⬇️ TEST METRICS (CSV)                                          │
+    │                                                                 │
+    │  A one-row summary of the test-set numbers shown on screen      │
+    │  (accuracy, ROC-AUC, precision, recall, F1, MCC) — ready to     │
+    │  paste into your report instead of typing them by hand.         │
+    └─────────────────────────────────────────────────────────────────┘
+
+    Files are named like `toxicity_test_predictions.csv` /
+    `toxicity_test_metrics.csv` (and the same for `activity_...`).
+
+
+1.6  The Student Research Datasets (datasets/)
+────────────────────────────────────────────────
+
+    The real datasets used in the STEC research notebook
+    (`final_destination.ipynb`) are included so you can reproduce the
+    study's models directly in the web app:
+
+      datasets/toxicity_compounds.csv
+          → 1,156 FDA drug records (DILIst) — for the TOXICITY task
+      datasets/_ACTIVITY__105_COMPOUNDS_FINAL_TRAINING.csv
+          → 105 compounds (30 active / 75 inactive) against OXA-family
+            β-lactamases — for the ACTIVITY task
+      datasets/prediction_compounds.xlsx
+          → 289-row flavonoid screening library — for PREDICT / RANK
+
+    Workflow:  Train on the two training files (both tasks), then
+    PREDICT with `prediction_compounds.xlsx`, and check the RANK page
+    for the Priority = Activity × Safety shortlist.
+
+
 ═══════════════════════════════════════════════════════════════════════════════
 2. PREDICTION — Test New Compounds
 ═══════════════════════════════════════════════════════════════════════════════

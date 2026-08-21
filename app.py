@@ -768,6 +768,7 @@ def train():
         all_metrics = {}
         all_graphs = {}
         all_best_params = {}
+        export_files = {}  # task_key -> {predictions, metrics} CSV names
         combined_task_names = []
         overwritten = False
 
@@ -787,6 +788,38 @@ def train():
                 task_name=task_key.title(), output_dir=str(eval_dir),
             )
             all_metrics[task_key] = metrics
+
+            # ── Export test-set predictions + metrics CSV (notebook 1.6a/2.6a) ──
+            # Mirror the students' Colab notebook: save per-compound held-out test
+            # predictions and a one-row metrics summary so Chapter IV has the
+            # actual numbers to analyze, not just the on-screen graphs.
+            y_test_pred = model.predict(X_test)
+            y_test_proba = model.predict_proba(X_test)[:, 1]
+            test_ids = (
+                df.loc[X_test.index, "Compound_ID"].values
+                if "Compound_ID" in df.columns
+                else [f"row_{i}" for i in X_test.index]
+            )
+            test_smiles = (
+                df.loc[X_test.index, smiles_col].values
+                if smiles_col in df.columns
+                else [""] * len(X_test)
+            )
+            pd.DataFrame({
+                "Compound_ID": test_ids,
+                "Smiles": test_smiles,
+                "True_Label": y_test.values,
+                "Predicted_Label": y_test_pred,
+                "Predicted_Proba": y_test_proba.round(4),
+            }).to_csv(sess_dir / f"{task_key}_test_predictions.csv", index=False)
+            pd.DataFrame([dict(metrics["test"])]).to_csv(
+                sess_dir / f"{task_key}_test_metrics.csv", index=False
+            )
+            export_files[task_key] = {
+                "predictions": f"{task_key}_test_predictions.csv",
+                "metrics": f"{task_key}_test_metrics.csv",
+            }
+
             combined_task_names.append(display_name.title() if display_name not in ("activity", "toxicity") else task_key.title())
 
             # ROC Curve
@@ -880,6 +913,8 @@ def train():
             dataset_preview=dataset_preview,
             dataset_columns=dataset_columns,
             overwritten=overwritten,
+            export_files=export_files,
+            session_id=session.get("session_id"),
         )
 
     except KeyError as e:
