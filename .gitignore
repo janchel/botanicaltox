@@ -22,11 +22,20 @@ uploads/
 server.pid
 server.log
 
+# scratch folder for one-off downloads (student data copies live in datasets/)
+temp/
+
 # Generated output (auto-created at runtime)
 outputs/
 datasets/features.csv
 datasets/medchem_features.csv
 datasets/dup_test.csv
+
+# Notebook-generated result CSVs (created when final_destination.ipynb is run locally)
+*_test_predictions.csv
+*_test_metrics.csv
+flavonoid_top15_shortlist.csv
+flavonoid_screening_results_ranked.csv
 
 # Models — keep only starter models
 models/*.pkl
