@@ -8,15 +8,32 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root {
-            --primary: #059669;
-            --primary-dark: #047857;
-            --success: #059669;
-            --danger: #dc2626;
-            --bg: #f0fdf4;
+            /* Medical/Plant Toxicity Theme */
+            --primary: #166534;           /* Deep green - botanical/plant theme */
+            --primary-dark: #15803d;
+            --secondary: #f97316;          /* Orange - activity/active compounds */
+            --secondary-dark: #ea580c;
+            --success: #16a34a;            /* Green - safe/non-toxic */
+            --danger: #dc2626;             /* Red - toxic/danger */
+            --warning: #f59e0b;            /* Amber - caution/priority */
+            --info: #0ea5e9;               /* Sky - neutral/info */
+            --bg: #f8fafc;                /* Light background */
             --card-bg: #ffffff;
             --text: #1e293b;
             --text-muted: #64748b;
-            --border: #dcfce7;
+            --border: #e2e8f0;
+            --badge-active-bg: #dcfce7;    /* Light green */
+            --badge-active-text: #166534;
+            --badge-inactive-bg: #fef2f2;  /* Light red */
+            --badge-inactive-text: #991b1b;
+            --badge-toxic-bg: #fee2e2;     /* Light red */
+            --badge-toxic-text: #b91c1c;
+            --badge-safe-bg: #f0fdf4;     /* Light green */
+            --badge-safe-text: #166534;
+            --stat-activity: linear-gradient(135deg, #f97316, #ea580c);  /* Orange */
+            --stat-toxicity: linear-gradient(135deg, #dc2626, #b91c1c); /* Red */
+            --stat-safe: linear-gradient(135deg, #16a34a, #15803d);     /* Green */
+            --stat-priority: linear-gradient(135deg, #8b5cf6, #7c3aed); /* Purple for priority */
         }
         * { box-sizing: border-box; }
         body {
@@ -27,7 +44,7 @@
         }
         .navbar {
             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            box-shadow: 0 2px 12px rgba(37,99,235,0.25);
+            box-shadow: 0 2px 12px rgba(22,101,52,0.25);
         }
         .navbar-brand {
             font-weight: 700;
@@ -71,6 +88,14 @@
             background: var(--primary);
             color: white;
         }
+        .btn-secondary {
+            background: var(--secondary);
+            border: none;
+            border-radius: 10px;
+            padding: 0.6rem 1.5rem;
+            font-weight: 600;
+        }
+        .btn-secondary:hover { background: var(--secondary-dark); transform: translateY(-1px); }
         .metric-box {
             background: #f1f5f9;
             border-radius: 12px;
@@ -108,7 +133,7 @@
         }
         .upload-zone:hover {
             border-color: var(--primary);
-            background: #eff6ff;
+            background: #f0fdf4;
         }
         .upload-zone i { font-size: 3rem; color: var(--primary); }
         .footer {
@@ -116,18 +141,26 @@
             padding: 2rem;
             color: var(--text-muted);
             font-size: 0.85rem;
+            background: var(--card-bg);
+            border-top: 1px solid var(--border);
         }
         table { font-size: 0.9rem; }
-        .badge-active { background: #dcfce7; color: #166534; }
-        .badge-inactive { background: #fef2f2; color: #991b1b; }
-        .badge-toxic { background: #fef2f2; color: #991b1b; }
-        .badge-safe { background: #dcfce7; color: #166534; }
+        /* Medical/Plant Toxicity Badges */
+        .badge-active { background: var(--badge-active-bg); color: var(--badge-active-text); }
+        .badge-inactive { background: var(--badge-inactive-bg); color: var(--badge-inactive-text); }
+        .badge-toxic { background: var(--badge-toxic-bg); color: var(--badge-toxic-text); }
+        .badge-safe { background: var(--badge-safe-bg); color: var(--badge-safe-text); }
+        /* Stat Cards with Medical Theme */
         .stat-card {
             padding: 1.25rem;
             border-radius: 12px;
             color: white;
             text-align: center;
         }
+        .stat-card.activity { background: var(--stat-activity); }
+        .stat-card.toxicity { background: var(--stat-toxicity); }
+        .stat-card.safe { background: var(--stat-safe); }
+        .stat-card.priority { background: var(--stat-priority); }
         .stat-card.blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
         .stat-card.green { background: linear-gradient(135deg, #10b981, #059669); }
         .stat-card.purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }

@@ -45,10 +45,10 @@
 <h3 class="fw-bold mt-4 mb-3">{{ task_key }} Model</h3>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-3"><div class="stat-card blue"><div class="num">{{ metrics.test.accuracy }}</div><div class="lbl">Test Accuracy</div></div></div>
-    <div class="col-md-3"><div class="stat-card green"><div class="num">{{ metrics.test.roc_auc }}</div><div class="lbl">Test ROC-AUC</div></div></div>
-    <div class="col-md-3"><div class="stat-card purple"><div class="num">{{ metrics.test.f1 }}</div><div class="lbl">Test F1 Score</div></div></div>
-    <div class="col-md-3"><div class="stat-card blue"><div class="num">{{ metrics.test.mcc }}</div><div class="lbl">Test MCC</div></div></div>
+    <div class="col-md-3"><div class="stat-card {% if tk == 'activity' %}activity{% elif tk == 'toxicity' %}toxicity{% else %}green{% endif %}"><div class="num">{{ metrics.test.accuracy }}</div><div class="lbl">Test Accuracy</div></div></div>
+    <div class="col-md-3"><div class="stat-card {% if tk == 'activity' %}activity{% elif tk == 'toxicity' %}toxicity{% else %}green{% endif %}"><div class="num">{{ metrics.test.roc_auc }}</div><div class="lbl">Test ROC-AUC</div></div></div>
+    <div class="col-md-3"><div class="stat-card {% if tk == 'activity' %}activity{% elif tk == 'toxicity' %}toxicity{% else %}green{% endif %}"><div class="num">{{ metrics.test.f1 }}</div><div class="lbl">Test F1 Score</div></div></div></div>
+    <div class="col-md-3"><div class="stat-card {% if tk == 'activity' %}activity{% elif tk == 'toxicity' %}toxicity{% else %}green{% endif %}"><div class="num">{{ metrics.test.mcc }}</div><div class="lbl">Test MCC</div></div></div>
 </div>
 
 <div class="card mb-4"><div class="card-header"><i class="bi bi-table"></i> Detailed Metrics — {{ task_key }}</div>
