@@ -35,6 +35,34 @@
             --stat-safe: linear-gradient(135deg, #16a34a, #15803d);     /* Green */
             --stat-priority: linear-gradient(135deg, #8b5cf6, #7c3aed); /* Purple for priority */
         }
+        /* Light theme (alternative) */
+        .theme-light {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --secondary: #f97316;
+            --secondary-dark: #ea580c;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning: #f59e0b;
+            --info: #0ea5e9;
+            --bg: #f1f5f9;
+            --card-bg: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+            --badge-active-bg: #dcfce7;
+            --badge-active-text: #166534;
+            --badge-inactive-bg: #fef2f2;
+            --badge-inactive-text: #991b1b;
+            --badge-toxic-bg: #fee2e2;
+            --badge-toxic-text: #b91c1c;
+            --badge-safe-bg: #f0fdf4;
+            --badge-safe-text: #166534;
+            --stat-activity: linear-gradient(135deg, #f97316, #ea580c);
+            --stat-toxicity: linear-gradient(135deg, #dc2626, #b91c1c);
+            --stat-safe: linear-gradient(135deg, #16a34a, #15803d);
+            --stat-priority: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        }
         * { box-sizing: border-box; }
         body {
             background: var(--bg);
@@ -174,6 +202,10 @@
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="bi bi-flower1"></i> BotanicalTox
             </a>
+            <!-- Theme Toggle -->
+            <button id="themeToggle" class="btn btn-sm btn-outline-light ms-2" title="Toggle theme">
+                <i class="bi bi-sun"></i>
+            </button>
             <div class="d-flex gap-2 align-items-center flex-wrap">
                 <!-- Feature links — always visible; protected routes prompt login -->
                 <a class="btn btn-sm {% if current_user.is_authenticated %}btn-light{% else %}btn-outline-light{% endif %}" href="{{ url_for('train') }}">
@@ -250,5 +282,24 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
+    <script>
+        // Theme toggle (medical/plant toxicity theme)
+        (function() {
+            const toggle = document.getElementById('themeToggle');
+            if (!toggle) return;
+            const body = document.body;
+            const THEME_KEY = 'botanicaltox_theme';
+            const current = localStorage.getItem(THEME_KEY);
+            if (current === 'light') {
+                body.classList.add('theme-light');
+                toggle.innerHTML = '<i class="bi bi-moon"></i>';
+            }
+            toggle.addEventListener('click', function() {
+                const isLight = body.classList.toggle('theme-light');
+                localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark');
+                this.innerHTML = isLight ? '<i class="bi bi-moon"></i>' : '<i class="bi bi-sun"></i>';
+            });
+        })();
+    </script>
 </body>
 </html>
