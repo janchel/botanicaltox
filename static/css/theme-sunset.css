@@ -1,0 +1,31 @@
+/* Theme: Sunset — warm purple/orange theme */
+:root {
+    --primary: #7c3aed;
+    --primary-dark: #6d28d9;
+    --secondary: #f97316;
+    --secondary-dark: #ea580c;
+    --success: #22c55e;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --info: #a78bfa;
+    --bg: #faf5ff;
+    --card-bg: #ffffff;
+    --text: #2e1065;
+    --text-muted: #7c6ba0;
+    --border: #e9d5ff;
+    --metric-bg: #f3e8ff;
+    --upload-bg: #fdfcff;
+    --upload-hover-bg: #faf5ff;
+    --badge-active-bg: #f3e8ff;
+    --badge-active-text: #6d28d9;
+    --badge-inactive-bg: #fef2f2;
+    --badge-inactive-text: #991b1b;
+    --badge-toxic-bg: #fee2e2;
+    --badge-toxic-text: #b91c1c;
+    --badge-safe-bg: #dcfce7;
+    --badge-safe-text: #166534;
+    --stat-activity: linear-gradient(135deg, #f97316, #ea580c);
+    --stat-toxicity: linear-gradient(135deg, #ef4444, #dc2626);
+    --stat-safe: linear-gradient(135deg, #22c55e, #16a34a);
+    --stat-priority: linear-gradient(135deg, #a855f7, #7c3aed);
+}
