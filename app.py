@@ -261,6 +261,33 @@ def can_delete_model(model_name: str, user) -> bool:
     return model_owner(model_name) == user.username
 
 
+def canonicalize_smiles(smi: str) -> str | None:
+    """Return the RDKit-canonical form of a SMILES string, or None if invalid.
+
+    Canonicalization lets us detect structurally identical molecules even when
+    they were written with different (non-identical) SMILES strings.
+    """
+    try:
+        mol = Chem.MolFromSmiles(str(smi))
+        return Chem.MolToSmiles(mol) if mol is not None else None
+    except Exception:
+        return None
+
+
+def dedup_by_canonical_smiles(df: pd.DataFrame, smiles_col: str, keep: str = "first") -> tuple[pd.DataFrame, int]:
+    """Deduplicate rows whose SMILES are structurally identical.
+
+    Compares RDKit-canonical SMILES rather than raw text, so equivalent
+    representations of the same molecule count as duplicates. Rows with
+    unparseable SMILES are kept here (they are reported/dropped later by
+    create_molecules). Returns (deduplicated_df, number_of_duplicates_removed).
+    """
+    canon = df[smiles_col].map(canonicalize_smiles)
+    dupes = canon.duplicated(keep=keep) & canon.notna()
+    out = df[~dupes].reset_index(drop=True)
+    return out, int(dupes.sum())
+
+
 def classify_compound(mol) -> str:
     """Classify a molecule into chemical categories from its structure."""
     if mol is None:
@@ -690,8 +717,13 @@ def train():
                     f"ℹ️ Found {dup_count} duplicate SMILES with identical labels — kept first occurrence.",
                     "info"
                 )
-            # Deduplicate: keep first occurrence
-            df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
+            # Deduplicate: keep first occurrence (structure-based)
+            df, canon_dup_count = dedup_by_canonical_smiles(df, smiles_col)
+            if canon_dup_count:
+                flash(
+                    f"ℹ️ Removed {canon_dup_count} additional structurally-identical duplicate(s) after label-conflict check.",
+                    "info"
+                )
 
         mol_list = create_molecules(df[smiles_col])
         failed_count = sum(1 for m in mol_list if m is None)
@@ -978,12 +1010,10 @@ def predict():
 
         # ── Duplicate detection for prediction ──
         if smiles_col:
-            dupes = df[smiles_col].duplicated()
-            if dupes.any():
-                dup_count = dupes.sum()
-                df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
+            df, dup_count = dedup_by_canonical_smiles(df, smiles_col)
+            if dup_count:
                 flash(
-                    f"ℹ️ Found {dup_count} duplicate SMILES in prediction data — kept first occurrence.",
+                    f"ℹ️ Found {dup_count} duplicate SMILES in prediction data (structure-based) — kept first occurrence.",
                     "info"
                 )
 
@@ -1397,10 +1427,11 @@ def ranking():
             return redirect(url_for("ranking"))
 
         dupes = df[smiles_col].duplicated()
-        if dupes.any():
-            dup_count = dupes.sum()
+        raw_dup_count = dupes.sum()
+        df, dup_count = dedup_by_canonical_smiles(df, smiles_col)
+        if dup_count:
             df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
-            flash(f"ℹ️ Merged {len(valid_files)} files ({n_before} compounds). Removed {dup_count} duplicate SMILES — kept first occurrence.", "info")
+            flash(f"ℹ️ Merged {len(valid_files)} files ({n_before} compounds). Removed {dup_count} duplicate SMILES (structure-based) — kept first occurrence.", "info")
         else:
             flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds, no duplicates found.", "info")
 
