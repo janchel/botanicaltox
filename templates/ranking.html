@@ -53,6 +53,20 @@
                         <div id="fileList" class="mt-2"></div>
                     </div>
 
+                    <!-- Deduplication Option -->
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="deduplicate" id="deduplicate" checked>
+                            <label class="form-check-label fw-semibold" for="deduplicate">
+                                <i class="bi bi-diagram-3"></i> Deduplicate by structure (canonical SMILES)
+                            </label>
+                            <div class="form-text text-muted small">
+                                When enabled (default), structurally identical compounds are merged before ranking.
+                                Disable to match notebook behavior and show all rows including duplicates.
+                            </div>
+                        </div>
+                    </div>
+
                     <hr>
                     <button type="submit" class="btn btn-warning btn-lg w-100" id="submitBtn"
                             {% if not available_models %}disabled{% endif %}>

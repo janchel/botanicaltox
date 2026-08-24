@@ -1,0 +1,51 @@
+/* ============================================================
+   Theme: Mint Julep — Pink & Green palette
+   #D37897 (rose) · #E09FB3 (blush) · #F9DEE5 (petal)
+   #799F76 (sage) · #457359 (forest)
+   ============================================================ */
+
+:root {
+    --primary: #457359;            /* Forest green — primary brand */
+    --primary-dark: #38604a;
+    --secondary: #d37897;          /* Rose — activity/accents */
+    --secondary-dark: #c05f7e;
+    --success: #799f76;            /* Sage — safe/non-toxic */
+    --danger: #c05f7e;             /* Deep rose for danger (keeps palette) */
+    --warning: #d37897;
+    --info: #799f76;
+    --bg: #fdf7f9;                 /* Petal-tinted background */
+    --card-bg: #ffffff;
+    --text: #3d4a42;
+    --text-muted: #8a9a8f;
+    --border: #f0dde4;
+    --metric-bg: #f9dee5;          /* Petal */
+    --upload-bg: #fdf7f9;
+    --upload-hover-bg: #f9dee5;
+    --badge-active-bg: #f9dee5;
+    --badge-active-text: #c05f7e;
+    --badge-inactive-bg: #f0dde4;
+    --badge-inactive-text: #a04a68;
+    --badge-toxic-bg: #f9dee5;
+    --badge-toxic-text: #a04a68;
+    --badge-safe-bg: #e6efdf;
+    --badge-safe-text: #457359;
+    --stat-activity: linear-gradient(135deg, #d37897, #c05f7e);
+    --stat-toxicity: linear-gradient(135deg, #b95c7c, #a04a68);
+    --stat-safe: linear-gradient(135deg, #799f76, #457359);
+    --stat-priority: linear-gradient(135deg, #e09fb3, #d37897);
+}
+
+/* Soft Mint Julep touches */
+body {
+    background: var(--bg);
+}
+.navbar {
+    background: linear-gradient(135deg, #457359, #38604a) !important;
+    box-shadow: 0 2px 12px rgba(69, 115, 89, 0.3);
+}
+.card:hover {
+    box-shadow: 0 8px 25px rgba(211, 120, 151, 0.18);
+}
+.upload-zone:hover {
+    background: var(--metric-bg);
+}
