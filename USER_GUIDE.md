@@ -2,7 +2,7 @@
 ║                                                                              ║
 ║     BotanicalTox — USER GUIDE                                                     ║
 ║     How to Predict Plant Compound Toxicity                              ║
-║     Version 3.1 — August 2026                                                  ║
+║     Version 3.2 — August 2026                                                  ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
@@ -21,98 +21,6 @@ and get predictions — all through a web browser.
 
 ⚠️  IMPORTANT: These are COMPUTATIONAL predictions, not lab results.
     Always validate predictions with experimental testing.
-
-
-═══════════════════════════════════════════════════════════════════════════════
-LOGIN — Accessing the Site
-═══════════════════════════════════════════════════════════════════════════════
-
-    The landing (home) page is PUBLIC — anyone can view it without logging in.
-    The Train / Predict / Plant / Rank features require a login.
-
-    When a guest clicks a protected link (e.g. "Train"), they are sent to the
-    Login page. After signing in, they are returned to the page they requested.
-
-  1.1  First Run — Default Admin
-  ─────────────────────────────
-      On the first launch, a default admin account is created:
-        Username:  admin
-        Password:  admin123   (CHANGE THIS AFTER FIRST LOGIN!)
-
-      ⚠️  To change it, set ADMIN_USERNAME and ADMIN_PASSWORD in a .env file
-          BEFORE the first run, then delete the instance/users.db file.
-
-  1.2  Creating User Accounts (Admin Approval Required)
-  ─────────────────────────────────────────────────────
-      Any user can click "Register" to create their own account.
-
-      New accounts are created in a PENDING state — they cannot log in
-      until an administrator approves them.
-
-      ⚠️  After registering, wait for an admin to approve your account.
-          You will see: "Registration submitted! An administrator must
-          approve your account before you can log in."
-
-      Once approved, the account gets the "user" role and full access to
-      Train / Predict / Plant / Rank features.
-
-  1.3  Admin — Approving New Users
-  ─────────────────────────────────
-      Admins see a "Users" button in the navigation bar (with a badge
-      showing how many registrations are pending).
-
-      Click "Users" → the management page lists every account:
-        • Approve  — allow a pending user to log in
-        • Reject   — suspend an approved user (blocks login again)
-        • Promote  — grant a user the admin role (so they can also approve
-                     users and manage the site)
-        • Demote   — remove a user's admin role
-        • Delete   — permanently remove an account (with confirmation)
-
-      The admin account itself cannot be promoted/demoted/rejected/deleted
-      (self-protection), and the LAST admin cannot be demoted (avoids lockout).
-
-  1.4  Logging Out
-  ─────────────────────────────
-      Click your username (top-right) → Logout.
-
-      Sessions expire when the browser is closed. Protected pages redirect
-      to the login page if you are not signed in.
-
-  1.4b  Changing Your Password
-  ─────────────────────────────
-      Any logged-in user can change their own password from
-      Settings → "Change Password":
-        • Current Password (to verify it's really you)
-        • New Password (min 6 characters)
-        • Confirm New Password
-
-      The default admin password should be changed here after first login.
-
-  1.5  Public Pages
-  ─────────────────────────────
-      These pages do NOT require login:
-        • Home (/)            — landing page
-        • Team (/team)        — student members & their profiles
-        • Login / Register    — auth pages
-
-  1.6  Team Profiles & the Team Page
-  ─────────────────────────────────────
-      The TEAM page (public) shows the student members behind the project.
-      It is a CURATED list — not every registered user appears on it.
-
-      • Only approved users explicitly marked as a "Team member" by the
-        ADMIN (Users → "Team" button) are shown on the page.
-      • Each member customizes their own profile from
-        Settings → "Your Profile":
-          - Full Name
-          - Course / Program
-          - Bio (short intro)
-          - Profile Picture (PNG / JPG / GIF / WebP)
-      • Admins are shown as "Project Lead", others as "Team Member".
-      • Profile pictures are stored in instance/avatars/.
-      • A member with no profile yet still appears (showing just their
-        username + default icon), so the admin can pre-add the team list.
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -616,7 +524,162 @@ BEFORE YOU START — The Workflow
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-4. QUICK REFERENCE — Common Questions
+4. RANKING — Find the Best Drug Candidates
+═══════════════════════════════════════════════════════════════════════════════
+
+    The Ranking feature sorts your compounds by a PRIORITY SCORE that
+    balances activity AND safety — so the top compounds are both likely
+    to work AND likely to be safe.
+
+    This is the key feature for drug discovery: you want compounds that
+    are BOTH active against the target AND non-toxic to humans.
+
+4.1  How Ranking Works
+───────────────────────
+
+    The app calculates three scores:
+
+    ┌──────────────────┬─────────────────────────────────────────────────┐
+    │  Score           │  Formula                                      │
+    ├──────────────────┼─────────────────────────────────────────────────┤
+    │  Activity_Score  │  P(active against OXA-23) — from ML model    │
+    │  Toxicity_Score  │  P(toxic to humans) — from ML model          │
+    │  Safety_Score    │  1 − Toxicity_Score = P(non-toxic)           │
+    │  Priority_Score  │  Activity_Score × Safety_Score               │
+    └──────────────────┴─────────────────────────────────────────────────┘
+
+    WHY MULTIPLY?  (Derringer & Suich, 1980; Wager et al., 2010)
+    Both terms are "higher = better" probabilities in [0, 1]. Multiplying
+    them rewards compounds only when they score well on BOTH criteria at
+    once — rather than letting a high activity score compensate for high
+    toxicity.
+
+    EXAMPLE:
+      Compound A: Activity=0.9, Toxicity=0.2 → Safety=0.8 → Priority=0.72
+      Compound B: Activity=0.9, Toxicity=0.8 → Safety=0.2 → Priority=0.18
+      Compound A ranks HIGHER because it's both active AND safe.
+
+4.2  Sample Input Data (CSV Format)
+─────────────────────────────────────
+
+    Create a CSV file with a Smiles column:
+
+    ┌──────────────┬──────────────────────────────────────────┐
+    │ Compound_ID  │ Smiles                                   │
+    ├──────────────┼──────────────────────────────────────────┤
+    │ NEW001       │ CCN(CC)CC                                │
+    │ NEW002       │ CN1C=NC2=C1C(=O)N(C(=O)N2C)C             │
+    │ NEW003       │ CC(C)CC1=CC=C(C=C1)C(C)C(=O)O            │
+    └──────────────┴──────────────────────────────────────────┘
+
+    REQUIRED:  Smiles column
+    OPTIONAL:  Compound_ID (preserved in output)
+
+    📁 SAMPLE FILE: datasets/prediction_compounds.xlsx (289 compounds)
+
+4.3  Step-by-Step Usage
+─────────────────────────
+
+    1. Open the web app → click "Rank Compounds"
+    2. Select your trained model from the dropdown
+       (e.g., "medchem (Activity, Toxicity)")
+    3. Upload your compound file (CSV or Excel with SMILES column)
+    4. OPTIONAL: Toggle "Deduplicate by structure" checkbox:
+       • CHECKED (default): Removes structurally identical compounds
+         before ranking → 15 UNIQUE top compounds
+       • UNCHECKED: Keeps all duplicates → matches notebook behavior
+         (may show same compound multiple times in top 15)
+    5. Click "Rank Top Compounds"
+
+4.4  Sample Output — Top 15 Ranked Compounds
+────────────────────────────────────────────
+
+    The results page shows:
+
+    ┌────────┬──────────────┬──────────┬──────────┬──────────┬──────────┐
+    │ Rank   │ Compound_ID  │ Activity │ Toxicity │ Safety   │ Priority │
+    │        │              │ Score    │ Score    │ Score    │ Score    │
+    ├────────┼──────────────┼──────────┼──────────┼──────────┼──────────┤
+    │ 🥇 1   │ 10399655     │ 0.914    │ 0.2755   │ 0.7245   │ 0.6622   │
+    │ 🥈 2   │ 4788         │ 0.8898   │ 0.3534   │ 0.6466   │ 0.5753   │
+    │ 🥉 3   │ 1889         │ 0.9138   │ 0.3978   │ 0.6022   │ 0.5503   │
+    │ 4      │ 73201        │ 0.9195   │ 0.4294   │ 0.5706   │ 0.5247   │
+    │ 5      │ 439246       │ 0.9077   │ 0.4414   │ 0.5586   │ 0.5070   │
+    └────────┴──────────────┴──────────┴──────────┴──────────┴──────────┘
+
+    INTERPRETATION (Medical Standard):
+    • Priority_Score > 0.5  → EXCELLENT candidate (both active & safe)
+    • Priority_Score 0.3-0.5 → GOOD candidate
+    • Priority_Score < 0.3  → LOW priority (weak on at least one)
+
+4.5  Medical Standard Interpretation
+────────────────────────────────────
+
+    In pharmaceutical research, a drug candidate must pass BOTH efficacy
+    AND safety thresholds:
+
+    ┌─────────────────────┬──────────────────────────────────────────────┐
+    │  Priority_Score     │  Medical Interpretation                     │
+    ├─────────────────────┼──────────────────────────────────────────────┤
+    │  > 0.7              │  EXCELLENT — Top priority for testing       │
+    │  0.5 - 0.7          │  VERY GOOD — Strong candidate               │
+    │  0.3 - 0.5          │  MODERATE — Consider for further study      │
+    │  0.1 - 0.3          │  WEAK — Low priority                        │
+    │  < 0.1              │  POOR — Not recommended                     │
+    └─────────────────────┴──────────────────────────────────────────────┘
+
+    WHY THIS MATTERS:
+    A compound with high activity (0.9) but high toxicity (0.8) gets a
+    Priority_Score of 0.18 — too dangerous for clinical use. The Priority
+    Score ensures you don't advance toxic compounds just because they're
+    active.
+
+4.6  Deduplication Toggle — Important!
+────────────────────────────────────
+
+    ⚠️  The ranking has a DEDUPLICATION TOGGLE checkbox.
+
+    CHECKED (default):  Removes structurally identical compounds before
+                        ranking. You get 15 UNIQUE top compounds.
+                        ✓ Scientifically sound for drug discovery.
+
+    UNCHECKED:  Keeps all duplicates. Shows all rows including repeated
+                compounds. This matches the student notebook behavior
+                (final_destination.ipynb) for comparison purposes.
+
+    EXAMPLE WITH DUPLICATES (toggle OFF):
+      Rank 1: Compound_A  (Priority=0.95)
+      Rank 2: Compound_B  (Priority=0.90)
+      Rank 3: Compound_A  (Priority=0.95) ← DUPLICATE!
+      Rank 4: Compound_A  (Priority=0.95) ← DUPLICATE!
+
+    EXAMPLE WITHOUT DUPLICATES (toggle ON - default):
+      Rank 1: Compound_A  (Priority=0.95)
+      Rank 2: Compound_B  (Priority=0.90)
+      Rank 3: Compound_C  (Priority=0.85)
+      ... (all unique compounds)
+
+    RECOMMENDATION:
+    • For real drug discovery: USE DEDUPLICATION (default)
+    • For comparing with notebook: TURN OFF deduplication
+
+4.7  Download Results
+───────────────────────
+
+    Click "Download CSV" to save the complete ranked list. The CSV
+    contains ALL compounds (not just top 15), sorted by Priority Score
+    from highest to lowest.
+
+    The CSV includes:
+    - Compound_ID, Smiles, Source_File
+    - Activity_Prediction, Activity_Score
+    - Toxicity_Prediction, Toxicity_Score
+    - Safety_Score, Priority_Score
+    - Chemical_Class, Activity_Label_Text, Toxicity_Label_Text
+
+
+═══════════════════════════════════════════════════════════════════════════════
+5. QUICK REFERENCE — Common Questions
 ═══════════════════════════════════════════════════════════════════════════════
 
 Q: Do I need to train before predicting?
@@ -694,6 +757,13 @@ A: The app automatically detects duplicate SMILES. If labels match,
    the first copy is kept. If labels conflict, all copies are removed
    and you'll see a warning to review your data.
 
+Q: Why does the ranking show the same compound multiple times?
+A: The ranking has a "Deduplicate by structure" checkbox (checked by
+   default). When UNCHECKED, it keeps all duplicates — so the same
+   compound may appear multiple times in the top 15. This matches the
+   student notebook behavior. For real drug discovery, keep it CHECKED
+   to remove duplicates and get 15 unique top compounds.
+
 Q: What do the topological indices (Wiener, Zagreb) mean?
 A: They measure molecular shape and branching complexity. Higher Wiener
    index = more spread-out molecule. Higher Zagreb M₁ = more branching.
@@ -701,7 +771,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-5. CSV FILE FORMATS — Quick Copy-Paste Templates
+6. CSV FILE FORMATS — Quick Copy-Paste Templates
 ═══════════════════════════════════════════════════════════════════════════════
 
 5.1  Training CSV Template
@@ -741,7 +811,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-6. INTERPRETING SCORES — A Student's Guide
+7. INTERPRETING SCORES — A Student's Guide
 ═══════════════════════════════════════════════════════════════════════════════
 
     Prediction Type     Score    Interpretation
@@ -760,123 +830,14 @@ A: They measure molecular shape and branching complexity. Higher Wiener
 
 
 ═══════════════════════════════════════════════════════════════════════════════
-7. HOW RDKit WORKS — Behind the Scenes
-═══════════════════════════════════════════════════════════════════════════════
-
-    This section explains how the app converts SMILES into numbers the
-    Random Forest can learn from. Understanding this helps you interpret
-    feature importance graphs and debug poor predictions.
-
-7.1  What is RDKit?
-─────────────────────
-
-    RDKit is an open-source cheminformatics toolkit — you give it a
-    chemical structure (SMILES) and it calculates numerical properties.
-
-    Analogy: RDKit is a translator. It takes the "language" of chemistry
-    (SMILES) and converts it to the "language" of math (numbers), which
-    machine learning algorithms understand.
-
-7.2  Step-by-Step: SMILES → Numbers → Training
-────────────────────────────────────────────────
-
-    STEP 1 — PARSE THE MOLECULE
-
-    SMILES: CCO
-    RDKit reads:  C — C — O — H  (+ implicit hydrogens)
-    It builds an internal graph where atoms = nodes, bonds = edges.
-
-    STEP 2 — COMPUTE 211 DESCRIPTORS
-
-    From the molecular graph, RDKit calculates everything:
-
-    ┌──────────────────────┬────────────────────┬──────────────────┐
-    │  Descriptor          │  What It Measures   │  Ethanol Value   │
-    ├──────────────────────┼────────────────────┼──────────────────┤
-    │  MolWt               │  Molecular weight   │  46.07           │
-    │  MolLogP             │  Lipophilicity      │  -0.24           │
-    │  TPSA                │  Polar surface area │  20.23           │
-    │  NumHDonors          │  H-bond donors      │  1               │
-    │  NumHAcceptors       │  H-bond acceptors   │  1               │
-    │  NumRotatableBonds   │  Flexibility        │  0               │
-    │  FractionCSP3        │  sp3 carbon ratio   │  1.0             │
-    │  RingCount           │  Number of rings    │  0               │
-    │  NumAromaticRings    │  Aromatic rings     │  0               │
-    │  BalabanJ            │  Molecular shape    │  0.0             │
-    │  WienerIndex         │  Compactness        │  1.0             │
-    │  ... 200+ more       │                    │                  │
-    └──────────────────────┴────────────────────┴──────────────────┘
-
-    Compare with BENZENE (C1=CC=CC=C1):
-    MolWt=78.1, NumAromaticRings=1, RingCount=1, FractionCSP3=0.0
-
-    This is why benzene and ethanol are easily separated — their
-    descriptors are completely different.
-
-    STEP 3 — BUILD THE FEATURE MATRIX
-
-    │ Smiles │ MolWt │ MolLogP │ TPSA │ Rings │ ... │ Label │
-    │ CCO    │  46.1 │  -0.24  │ 20.2 │   0   │ ... │   0   │
-    │ C1=C.. │  78.1 │   2.13  │  0.0 │   1   │ ... │   1   │
-    │ CC(=O) │  60.1 │  -0.17  │ 37.3 │   0   │ ... │   0   │
-    90 rows × 211 columns = 18,990 data points to learn from.
-
-    STEP 4 — RANDOM FOREST LEARNS RULES
-
-    The model finds patterns like:
-    • "If NumAromaticRings > 0 AND MolLogP > 1.5 → Active"
-    • "If FractionCSP3 > 0.8 AND MolWt < 100 → Inactive"
-
-    These rules are stored in the .pkl file.
-
-    STEP 5 — PREDICT NEW COMPOUNDS
-
-    New SMILES → same RDKit descriptors → model applies its rules → result.
-
-7.3  What Makes a Good Feature?
-─────────────────────────────────
-
-    The Feature Importance chart ranks descriptors by usefulness.
-    Chemically meaningful features at the top = good sign.
-
-    │ Rank │ Feature           │ Why It Matters                     │
-    │  1   │ NumAromaticRings  │ Aromatic rings affect drug binding │
-    │  2   │ MolLogP           │ Lipophilicity affects absorption   │
-    │  3   │ TPSA              │ Polar surface affects permeability │
-    │  4   │ NumHDonors        │ H-bonds affect target interaction  │
-    │  5   │ FractionCSP3      │ 3D shape affects binding pocket    │
-
-    If top features make chemical sense, the model found real patterns
-    — not random noise.
-
-7.4  Compounds vs. Descriptors — The Overfitting Problem
-──────────────────────────────────────────────────────────
-
-    211 descriptors but only 10 compounds? The model has more "questions"
-    than "answers" — it memorizes but cannot generalize.
-
-    │ Compounds │ Expected Model Quality                    │
-    │ 10-30     │ Demo only — expect overfitting            │
-    │ 30-100    │ Moderate — some patterns emerge           │
-    │ 100-500   │ Good — reliable predictions              │
-    │ 500+      │ Excellent — publication quality           │
-
-    Rule of thumb: 3-5 compounds per important descriptor.
-    Since ~10-15 descriptors usually matter, 50+ compounds is solid.
-
-═══════════════════════════════════════════════════════════════════════════════
-
-
-═══════════════════════════════════════════════════════════════════════════════
-
-7. HOW RDKit WORKS — Behind the Scenes
+8. HOW RDKit WORKS — Behind the Scenes
 ═══════════════════════════════════════════════════════════════════════════════
 
     This section explains how the app converts a SMILES string into
     numbers the Random Forest can learn from. Understanding this helps
     you interpret feature importance graphs and debug bad predictions.
 
-7.1  What is RDKit?
+8.1  What is RDKit?
 ─────────────────────
 
     RDKit is an open-source cheminformatics toolkit. It reads chemical
@@ -887,7 +848,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     chemistry (SMILES) and translates it into the "language" of math
     (numbers), which the Random Forest understands.
 
-7.2  Step-by-Step: SMILES → Numbers → Training
+8.2  Step-by-Step: SMILES → Numbers → Training
 ────────────────────────────────────────────────
 
     STEP 1: PARSE THE MOLECULE
@@ -960,7 +921,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     ───────────────────────────────
     New SMILES → same RDKit descriptors → model applies its rules → prediction.
 
-7.3  What Makes a Good Feature?
+8.3  What Makes a Good Feature?
 ─────────────────────────────────
 
     The "Feature Importance" chart shows which descriptors the model
@@ -977,7 +938,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     If the top features are chemically interpretable, the model is
     learning real structure-activity relationships — not noise.
 
-7.4  Data Size vs. Descriptors
+8.4  Data Size vs. Descriptors
 ────────────────────────────────
 
     With 211 descriptors but only 10 compounds, the model has more
