@@ -1,7 +1,11 @@
 """
 app.py — Flask Web Application
 ===============================
-Web interface for the BotanicalTox ML pipeline. Students can:
+Web interface for the BotanicalTox ML pipeline.
+Research focus: Predicting plant compound activity against OXA-23 
+β-lactamase (antibiotic resistance enzyme) and toxicity to humans.
+
+Students can:
   - Upload training data (CSV) → train models → view graphs & metrics
   - Upload prediction data (CSV) → get predictions → download results
 
@@ -259,6 +263,33 @@ def can_delete_model(model_name: str, user) -> bool:
     if model_name.lower() in PROTECTED_MODELS:
         return False
     return model_owner(model_name) == user.username
+
+
+def canonicalize_smiles(smi: str) -> str | None:
+    """Return the RDKit-canonical form of a SMILES string, or None if invalid.
+
+    Canonicalization lets us detect structurally identical molecules even when
+    they were written with different (non-identical) SMILES strings.
+    """
+    try:
+        mol = Chem.MolFromSmiles(str(smi))
+        return Chem.MolToSmiles(mol) if mol is not None else None
+    except Exception:
+        return None
+
+
+def dedup_by_canonical_smiles(df: pd.DataFrame, smiles_col: str, keep: str = "first") -> tuple[pd.DataFrame, int]:
+    """Deduplicate rows whose SMILES are structurally identical.
+
+    Compares RDKit-canonical SMILES rather than raw text, so equivalent
+    representations of the same molecule count as duplicates. Rows with
+    unparseable SMILES are kept here (they are reported/dropped later by
+    create_molecules). Returns (deduplicated_df, number_of_duplicates_removed).
+    """
+    canon = df[smiles_col].map(canonicalize_smiles)
+    dupes = canon.duplicated(keep=keep) & canon.notna()
+    out = df[~dupes].reset_index(drop=True)
+    return out, int(dupes.sum())
 
 
 def classify_compound(mol) -> str:
@@ -690,8 +721,13 @@ def train():
                     f"ℹ️ Found {dup_count} duplicate SMILES with identical labels — kept first occurrence.",
                     "info"
                 )
-            # Deduplicate: keep first occurrence
-            df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
+            # Deduplicate: keep first occurrence (structure-based)
+            df, canon_dup_count = dedup_by_canonical_smiles(df, smiles_col)
+            if canon_dup_count:
+                flash(
+                    f"ℹ️ Removed {canon_dup_count} additional structurally-identical duplicate(s) after label-conflict check.",
+                    "info"
+                )
 
         mol_list = create_molecules(df[smiles_col])
         failed_count = sum(1 for m in mol_list if m is None)
@@ -978,12 +1014,10 @@ def predict():
 
         # ── Duplicate detection for prediction ──
         if smiles_col:
-            dupes = df[smiles_col].duplicated()
-            if dupes.any():
-                dup_count = dupes.sum()
-                df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
+            df, dup_count = dedup_by_canonical_smiles(df, smiles_col)
+            if dup_count:
                 flash(
-                    f"ℹ️ Found {dup_count} duplicate SMILES in prediction data — kept first occurrence.",
+                    f"ℹ️ Found {dup_count} duplicate SMILES in prediction data (structure-based) — kept first occurrence.",
                     "info"
                 )
 
@@ -1389,20 +1423,27 @@ def ranking():
         df = pd.concat(all_dfs, ignore_index=True)
         n_before = len(df)
 
-        # Deduplicate: keep first occurrence of each SMILES
+        # Check if user wants deduplication (default: True)
+        deduplicate = request.form.get("deduplicate", "on") == "on"
+
+        # Deduplicate: keep first occurrence of each SMILES (if enabled)
         try:
             smiles_col = parse_smiles_column(df)
         except ValueError:
             flash("Could not find SMILES column in merged data.", "error")
             return redirect(url_for("ranking"))
 
-        dupes = df[smiles_col].duplicated()
-        if dupes.any():
-            dup_count = dupes.sum()
-            df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
-            flash(f"ℹ️ Merged {len(valid_files)} files ({n_before} compounds). Removed {dup_count} duplicate SMILES — kept first occurrence.", "info")
+        if deduplicate:
+            dupes = df[smiles_col].duplicated()
+            raw_dup_count = dupes.sum()
+            df, dup_count = dedup_by_canonical_smiles(df, smiles_col)
+            if dup_count:
+                df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
+                flash(f"ℹ️ Merged {len(valid_files)} files ({n_before} compounds). Removed {dup_count} duplicate SMILES (structure-based) — kept first occurrence.", "info")
+            else:
+                flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds, no duplicates found.", "info")
         else:
-            flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds, no duplicates found.", "info")
+            flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds (duplicates kept).", "info")
 
         try:
             smiles_col = parse_smiles_column(df)
@@ -1477,17 +1518,24 @@ def ranking():
             results["Priority_Score"] = results["Safety_Score"].round(4)
             sort_col = "Priority_Score"
 
-        # Sort and take top 15
-        results = results.sort_values(sort_col, ascending=False).head(15).reset_index(drop=True)
+        # Sort by priority score
+        results = results.sort_values(sort_col, ascending=False).reset_index(drop=True)
+
+        # Save FULL results to CSV (before taking top 15)
+        result_path = sess_dir / "ranking.csv"
+        results.to_csv(result_path, index=False)
+
+        # Take top 15 for display
+        results_display = results.head(15).reset_index(drop=True)
 
         # Add chemical class and labels
-        mol_list_ranked = create_molecules(pd.Series(results[smiles_col].tolist()))
-        results["Chemical_Class"] = [classify_compound(m) for m in mol_list_ranked]
-        if "Activity_Prediction" in results.columns:
-            results["Activity_Label_Text"] = results["Activity_Prediction"].map(
+        mol_list_ranked = create_molecules(pd.Series(results_display[smiles_col].tolist()))
+        results_display["Chemical_Class"] = [classify_compound(m) for m in mol_list_ranked]
+        if "Activity_Prediction" in results_display.columns:
+            results_display["Activity_Label_Text"] = results_display["Activity_Prediction"].map(
                 {1: "Active (inhibits OXA-23)", 0: "Inactive"})
-        if "Toxicity_Prediction" in results.columns:
-            results["Toxicity_Label_Text"] = results["Toxicity_Prediction"].map(
+        if "Toxicity_Prediction" in results_display.columns:
+            results_display["Toxicity_Label_Text"] = results_display["Toxicity_Prediction"].map(
                 {1: "Toxic to humans", 0: "Safe"})
 
         # Generate molecule images for top 10
@@ -1495,19 +1543,16 @@ def ranking():
         for i, mol in enumerate(mol_list_ranked[:10]):
             img_b64 = mol_to_b64(mol)
             if img_b64:
-                cid = str(results.iloc[i].get("Compound_ID", f"#{i+1}"))
+                cid = str(results_display.iloc[i].get("Compound_ID", f"#{i+1}"))
                 mol_images.append({"id": cid, "image": img_b64})
 
         preview_cols = ["Compound_ID", smiles_col, "Chemical_Class", "Source_File"]
         for c in ["Activity_Prediction", "Activity_Score", "Toxicity_Prediction", "Toxicity_Score",
                   "Safety_Score", "Priority_Score"]:
-            if c in results.columns:
+            if c in results_display.columns:
                 preview_cols.append(c)
-        preview = results[preview_cols].head(15).to_dict(orient="records")
+        preview = results_display[preview_cols].to_dict(orient="records")
         columns = list(preview_cols)
-
-        result_path = sess_dir / "ranking.csv"
-        results.to_csv(result_path, index=False)
 
         return render_template(
             "ranking_result.html",
@@ -1517,6 +1562,7 @@ def ranking():
             tasks=" + ".join(tasks_found),
             result_filename=result_path.name,
             session_id=session.get("session_id"),
+            deduplicated=deduplicate,
         )
 
     except Exception as e:
