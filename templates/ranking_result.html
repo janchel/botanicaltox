@@ -14,6 +14,11 @@
 <p class="text-muted">
     Model: {{ model_name | replace('_', ' ') | title }} ({{ tasks }}) &middot;
     Sorted by Priority Score (Activity × Safety)
+    {% if deduplicated is defined and not deduplicated %}
+    &middot; <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Duplicates included</span>
+    {% else %}
+    &middot; <span class="badge bg-success"><i class="bi bi-check-circle"></i> Deduplicated</span>
+    {% endif %}
 </p>
 
 <!-- Molecule Structures -->

@@ -1,0 +1,31 @@
+/* Theme: Botanical (default) — deep green medical/plant theme */
+:root {
+    --primary: #166534;
+    --primary-dark: #15803d;
+    --secondary: #f97316;
+    --secondary-dark: #ea580c;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --warning: #f59e0b;
+    --info: #0ea5e9;
+    --bg: #f8fafc;
+    --card-bg: #ffffff;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --metric-bg: #f1f5f9;
+    --upload-bg: #fafbfc;
+    --upload-hover-bg: #f0fdf4;
+    --badge-active-bg: #dcfce7;
+    --badge-active-text: #166534;
+    --badge-inactive-bg: #fef2f2;
+    --badge-inactive-text: #991b1b;
+    --badge-toxic-bg: #fee2e2;
+    --badge-toxic-text: #b91c1c;
+    --badge-safe-bg: #f0fdf4;
+    --badge-safe-text: #166534;
+    --stat-activity: linear-gradient(135deg, #f97316, #ea580c);
+    --stat-toxicity: linear-gradient(135deg, #dc2626, #b91c1c);
+    --stat-safe: linear-gradient(135deg, #16a34a, #15803d);
+    --stat-priority: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
