@@ -1419,21 +1419,27 @@ def ranking():
         df = pd.concat(all_dfs, ignore_index=True)
         n_before = len(df)
 
-        # Deduplicate: keep first occurrence of each SMILES
+        # Check if user wants deduplication (default: True)
+        deduplicate = request.form.get("deduplicate", "on") == "on"
+
+        # Deduplicate: keep first occurrence of each SMILES (if enabled)
         try:
             smiles_col = parse_smiles_column(df)
         except ValueError:
             flash("Could not find SMILES column in merged data.", "error")
             return redirect(url_for("ranking"))
 
-        dupes = df[smiles_col].duplicated()
-        raw_dup_count = dupes.sum()
-        df, dup_count = dedup_by_canonical_smiles(df, smiles_col)
-        if dup_count:
-            df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
-            flash(f"ℹ️ Merged {len(valid_files)} files ({n_before} compounds). Removed {dup_count} duplicate SMILES (structure-based) — kept first occurrence.", "info")
+        if deduplicate:
+            dupes = df[smiles_col].duplicated()
+            raw_dup_count = dupes.sum()
+            df, dup_count = dedup_by_canonical_smiles(df, smiles_col)
+            if dup_count:
+                df = df.drop_duplicates(subset=[smiles_col], keep="first").reset_index(drop=True)
+                flash(f"ℹ️ Merged {len(valid_files)} files ({n_before} compounds). Removed {dup_count} duplicate SMILES (structure-based) — kept first occurrence.", "info")
+            else:
+                flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds, no duplicates found.", "info")
         else:
-            flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds, no duplicates found.", "info")
+            flash(f"ℹ️ Merged {len(valid_files)} files: {n_before} total compounds (duplicates kept).", "info")
 
         try:
             smiles_col = parse_smiles_column(df)
@@ -1508,17 +1514,24 @@ def ranking():
             results["Priority_Score"] = results["Safety_Score"].round(4)
             sort_col = "Priority_Score"
 
-        # Sort and take top 15
-        results = results.sort_values(sort_col, ascending=False).head(15).reset_index(drop=True)
+        # Sort by priority score
+        results = results.sort_values(sort_col, ascending=False).reset_index(drop=True)
+
+        # Save FULL results to CSV (before taking top 15)
+        result_path = sess_dir / "ranking.csv"
+        results.to_csv(result_path, index=False)
+
+        # Take top 15 for display
+        results_display = results.head(15).reset_index(drop=True)
 
         # Add chemical class and labels
-        mol_list_ranked = create_molecules(pd.Series(results[smiles_col].tolist()))
-        results["Chemical_Class"] = [classify_compound(m) for m in mol_list_ranked]
-        if "Activity_Prediction" in results.columns:
-            results["Activity_Label_Text"] = results["Activity_Prediction"].map(
+        mol_list_ranked = create_molecules(pd.Series(results_display[smiles_col].tolist()))
+        results_display["Chemical_Class"] = [classify_compound(m) for m in mol_list_ranked]
+        if "Activity_Prediction" in results_display.columns:
+            results_display["Activity_Label_Text"] = results_display["Activity_Prediction"].map(
                 {1: "Active (inhibits OXA-23)", 0: "Inactive"})
-        if "Toxicity_Prediction" in results.columns:
-            results["Toxicity_Label_Text"] = results["Toxicity_Prediction"].map(
+        if "Toxicity_Prediction" in results_display.columns:
+            results_display["Toxicity_Label_Text"] = results_display["Toxicity_Prediction"].map(
                 {1: "Toxic to humans", 0: "Safe"})
 
         # Generate molecule images for top 10
@@ -1526,19 +1539,16 @@ def ranking():
         for i, mol in enumerate(mol_list_ranked[:10]):
             img_b64 = mol_to_b64(mol)
             if img_b64:
-                cid = str(results.iloc[i].get("Compound_ID", f"#{i+1}"))
+                cid = str(results_display.iloc[i].get("Compound_ID", f"#{i+1}"))
                 mol_images.append({"id": cid, "image": img_b64})
 
         preview_cols = ["Compound_ID", smiles_col, "Chemical_Class", "Source_File"]
         for c in ["Activity_Prediction", "Activity_Score", "Toxicity_Prediction", "Toxicity_Score",
                   "Safety_Score", "Priority_Score"]:
-            if c in results.columns:
+            if c in results_display.columns:
                 preview_cols.append(c)
-        preview = results[preview_cols].head(15).to_dict(orient="records")
+        preview = results_display[preview_cols].to_dict(orient="records")
         columns = list(preview_cols)
-
-        result_path = sess_dir / "ranking.csv"
-        results.to_csv(result_path, index=False)
 
         return render_template(
             "ranking_result.html",
@@ -1548,6 +1558,7 @@ def ranking():
             tasks=" + ".join(tasks_found),
             result_filename=result_path.name,
             session_id=session.get("session_id"),
+            deduplicated=deduplicate,
         )
 
     except Exception as e:
