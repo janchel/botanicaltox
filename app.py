@@ -1591,6 +1591,21 @@ def settings():
     return render_template("settings.html", models=model_info)
 
 
+VALID_THEMES = {"botanical", "mintjulep", "clinical"}
+
+
+@app.route("/settings/theme", methods=["POST"])
+@login_required
+def set_theme():
+    """Persist the logged-in user's theme preference (per-user, not global)."""
+    data = request.get_json(silent=True) or {}
+    theme = data.get("theme", "")
+    if theme not in VALID_THEMES:
+        return jsonify({"ok": False, "error": "Unknown theme"}), 400
+    User.set_theme(current_user.id, theme)
+    return jsonify({"ok": True, "theme": theme})
+
+
 @app.route("/delete/<model_name>", methods=["POST"])
 @login_required
 def delete_model(model_name):

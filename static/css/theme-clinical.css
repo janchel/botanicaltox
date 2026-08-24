@@ -1,0 +1,366 @@
+/* ============================================================
+   Theme: Clinical — Full medical/hospital redesign
+   Not just colors: changes logo context, typography,
+   corner styles, navbar structure and component shapes.
+   ============================================================ */
+
+/* --- Clinical palette — Mint Julep edition ---
+   Forest #457359 · Sage #799F76 · Rose #D37897
+   Blush #E09FB3 · Petal #F9DEE5 · Deep rose #A04A68 */
+:root {
+    --primary: #457359;            /* Forest green — primary brand */
+    --primary-dark: #38604a;
+    --secondary: #d37897;          /* Rose — accents */
+    --secondary-dark: #c05f7e;
+    --success: #799f76;            /* Sage — safe/non-toxic */
+    --danger: #c05f7e;             /* Deep rose for danger (keeps palette) */
+    --warning: #d37897;
+    --info: #799f76;
+    --bg: #fdf7f9;                 /* Petal-tinted background */
+    --card-bg: #ffffff;
+    --text: #3d4a42;
+    --text-muted: #8a9a8f;
+    --border: #f0dde4;
+    --metric-bg: #f9dee5;          /* Petal */
+    --upload-bg: #fdf7f9;
+    --upload-hover-bg: #f9dee5;
+    --badge-active-bg: #f9dee5;
+    --badge-active-text: #c05f7e;
+    --badge-inactive-bg: #f0dde4;
+    --badge-inactive-text: #a04a68;
+    --badge-toxic-bg: #f9dee5;
+    --badge-toxic-text: #a04a68;
+    --badge-safe-bg: #e6efdf;
+    --badge-safe-text: #457359;
+    --stat-activity: linear-gradient(135deg, #d37897, #c05f7e);
+    --stat-toxicity: linear-gradient(135deg, #b95c7c, #a04a68);
+    --stat-safe: linear-gradient(135deg, #799f76, #457359);
+    --stat-priority: linear-gradient(135deg, #e09fb3, #d37897);
+}
+
+/* --- Structural redesign (what makes this a FULL theme) --- */
+body.theme-clinical {
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 0.1px;
+}
+
+/* Navbar becomes a flat clinical header bar with bottom accent line */
+body.theme-clinical .navbar {
+    background: #ffffff !important;
+    border-bottom: 3px solid var(--primary);
+    box-shadow: 0 1px 6px rgba(14, 116, 144, 0.12);
+}
+body.theme-clinical .navbar-brand {
+    color: var(--primary) !important;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 1.15rem;
+    border-left: 4px solid var(--danger);
+    padding-left: 0.75rem;
+}
+body.theme-clinical .navbar .btn-outline-light {
+    color: var(--primary);
+    border-color: var(--border);
+    border-radius: 4px;
+}
+body.theme-clinical .navbar .btn-outline-light:hover {
+    background: var(--primary);
+    color: #fff;
+}
+body.theme-clinical .navbar .btn-light {
+    background: var(--primary);
+    color: #fff;
+    border-radius: 4px;
+}
+
+/* Cards become flat, sharp-edged clinical panels */
+body.theme-clinical .card {
+    border-radius: 4px;
+    border-top: 3px solid var(--primary);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+body.theme-clinical .card:hover {
+    transform: none;
+    box-shadow: 0 3px 10px rgba(14, 116, 144, 0.15);
+}
+body.theme-clinical .card-header {
+    border-radius: 4px 4px 0 0 !important;
+    background: var(--metric-bg);
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.8px;
+}
+
+/* Buttons: squared, clinical */
+body.theme-clinical .btn {
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+body.theme-clinical .btn-primary { background: var(--primary); }
+body.theme-clinical .btn-primary:hover { background: var(--primary-dark); }
+body.theme-clinical .btn-secondary { background: var(--secondary); }
+
+/* Metric boxes look like lab readouts */
+body.theme-clinical .metric-box {
+    border-left: 4px solid var(--primary);
+    border-radius: 4px;
+    text-align: left;
+    padding-left: 1.25rem;
+}
+
+/* Upload zone looks like a specimen intake area */
+body.theme-clinical .upload-zone {
+    border-radius: 4px;
+    border-style: solid;
+    border-width: 1px;
+    background: repeating-linear-gradient(
+        45deg, var(--upload-bg), var(--upload-bg) 12px,
+        #f6e8ee 12px, #f6e8ee 24px);
+}
+
+/* Footer becomes a clinical disclaimer strip */
+body.theme-clinical .footer {
+    background: #22322a;
+    color: #9db3a4;
+    border-top: 4px solid var(--primary);
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+}
+
+/* Tables get clinical chart styling */
+body.theme-clinical table { font-size: 0.85rem; }
+body.theme-clinical .table thead th {
+    background: var(--metric-bg);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.6px;
+    color: var(--primary-dark);
+}
+
+/* Alerts squared */
+body.theme-clinical .alert { border-radius: 4px; }
+
+/* ============================================================
+   Homepage feature cards — clinical procedure modules
+   Targets the ORIGINAL homepage markup via the four invisible
+   hook classes (feature-card--train/predict/plant/rank).
+   Each module gets a department color code (hospital
+   wayfinding): teal lab, blue diagnostics, green botanical,
+   amber ranking.
+   ============================================================ */
+
+/* Department color codes (accent + soft tint per module) */
+body.theme-clinical .feature-card--train   { --accent: #457359; --accent-soft: #eaf1e6; }  /* forest */
+body.theme-clinical .feature-card--predict { --accent: #d37897; --accent-soft: #fceef3; }  /* rose */
+body.theme-clinical .feature-card--plant   { --accent: #799f76; --accent-soft: #eff4ea; }  /* sage */
+body.theme-clinical .feature-card--rank    { --accent: #a04a68; --accent-soft: #f7e6ec; }  /* deep rose */
+
+/* Horizontal 4-up module lineup on desktop.
+   The homepage has two Bootstrap rows (Train+Predict / Plant+Rank);
+   side-by-side inline grids merge them into one visual row of 4
+   without touching the markup. Browsers without :has() simply keep
+   the stock stacked layout. */
+@media (min-width: 1200px) {
+    body.theme-clinical .row:has([class*="feature-card--"]) {
+        display: inline-grid;
+        grid-template-columns: repeat(2, 1fr);
+        align-items: stretch;
+        width: calc(50% - 0.5rem);
+        vertical-align: top;
+        margin-top: 0 !important;   /* neutralizes .mt-2 on the second row */
+    }
+    body.theme-clinical .row:has([class*="feature-card--"]) > [class*="col-"] {
+        width: auto;
+        max-width: none;
+    }
+    /* The two side-by-side grids size independently, so their rows can
+       end up a few px apart (e.g. 550 vs 578). A shared min-height above
+       the tallest natural content forces all four cards to equal height.
+       CTA buttons stay pinned to the bottom edge (margin-top:auto). */
+    body.theme-clinical [class*="feature-card--"] {
+        min-height: 590px;
+    }
+}
+
+/* Panel: crisp white chart card with department color band */
+body.theme-clinical [class*="feature-card--"] {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+body.theme-clinical [class*="feature-card--"]::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: var(--accent);
+}
+body.theme-clinical [class*="feature-card--"]:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+    box-shadow: 0 10px 24px -12px rgba(15, 23, 42, 0.28);
+}
+
+/* Body reads left-to-right like a chart, not centered
+   (!important required: markup carries Bootstrap's .text-center) */
+body.theme-clinical [class*="feature-card--"] > .card-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left !important;
+}
+
+/* Big inline icon becomes a tinted specimen badge */
+body.theme-clinical [class*="feature-card--"] > .card-body > i.bi {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    font-size: 1.4rem !important;          /* beats inline style="font-size:3rem" */
+    color: var(--accent) !important;       /* beats inline color */
+    background: var(--accent-soft);
+    border: 1px solid var(--border);
+}
+
+/* Eyebrow module label above the title — chart tab style */
+body.theme-clinical [class*="feature-card--"] h3 {
+    letter-spacing: 0.2px;
+}
+body.theme-clinical [class*="feature-card--"] h3::before {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--primary-dark);
+}
+body.theme-clinical .feature-card--train   h3::before { content: 'Module 01'; }
+body.theme-clinical .feature-card--predict h3::before { content: 'Module 02'; }
+body.theme-clinical .feature-card--plant   h3::before { content: 'Module 03'; }
+body.theme-clinical .feature-card--rank    h3::before { content: 'Module 04'; }
+
+/* Description: relaxed clinical line spacing */
+body.theme-clinical [class*="feature-card--"] p.small { line-height: 1.6; }
+
+/* Divider replaced by a tinted "chart review" panel for the checklist */
+body.theme-clinical [class*="feature-card--"] hr { display: none; }
+body.theme-clinical [class*="feature-card--"] > .card-body > div.small {
+    width: 100%;
+    background: #faf5f7;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 1rem;
+    line-height: 1.9;
+}
+body.theme-clinical [class*="feature-card--"] > .card-body > div.small i {
+    color: var(--accent) !important;       /* beats Bootstrap .text-success */
+}
+
+/* Unified CTA: full-width department-colored action bar */
+body.theme-clinical [class*="feature-card--"] > .card-body > .btn {
+    margin-top: auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: #ffffff !important;             /* also overrides btn-warning black text */
+    letter-spacing: 0.6px;
+}
+body.theme-clinical [class*="feature-card--"] > .card-body > .btn::after {
+    content: '\203A';                      /* chevron-like arrow */
+    font-size: 1.25em;
+    font-weight: 700;
+    line-height: 1;
+    transition: transform 0.15s ease;
+}
+body.theme-clinical [class*="feature-card--"] > .card-body > .btn:hover {
+    filter: brightness(0.88);
+}
+body.theme-clinical [class*="feature-card--"] > .card-body > .btn:hover::after {
+    transform: translateX(3px);
+}
+body.theme-clinical [class*="feature-card--"] > .card-body > .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   Bottom capability strip — clinical platform tiles
+   The loud gradient blocks become clean white chart tiles:
+   department accent band, uppercase kicker label on top,
+   large navy value below, watermark icon in the corner.
+   ============================================================ */
+body.theme-clinical .stat-card {
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    display: flex;
+    flex-direction: column-reverse;   /* kicker label above the value */
+    align-items: flex-start;
+    text-align: left !important;
+    gap: 0.15rem;
+    padding: 1.15rem 1.25rem 1.2rem;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+body.theme-clinical .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--tile-accent, var(--primary));
+}
+body.theme-clinical .stat-card::after {
+    font-family: 'bootstrap-icons';
+    position: absolute;
+    right: 1rem;
+    top: 0.8rem;
+    font-size: 1.35rem;
+    line-height: 1;
+    color: var(--tile-accent, var(--primary));
+    opacity: 0.3;
+}
+/* Department mapping (accent + corner glyph) */
+body.theme-clinical .stat-card.blue   { --tile-accent: #457359; }   /* forest */
+body.theme-clinical .stat-card.blue::after   { content: '\f2d6'; }  /* bi-cpu       — descriptor engine */
+body.theme-clinical .stat-card.green  { --tile-accent: #799f76; }   /* sage */
+body.theme-clinical .stat-card.green::after  { content: '\f56b'; }  /* bi-sliders   — feature count      */
+body.theme-clinical .stat-card.purple { --tile-accent: #c05f7e; }   /* rose */
+body.theme-clinical .stat-card.purple::after { content: '\f2ee'; }  /* bi-diagram-3 — model topology */
+
+body.theme-clinical .stat-card .num {
+    font-size: 1.45rem;
+    line-height: 1.25;
+    color: var(--text);
+}
+body.theme-clinical .stat-card .lbl {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    opacity: 1;
+}
+body.theme-clinical .stat-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--tile-accent, var(--primary));
+    box-shadow: 0 10px 22px -12px rgba(15, 23, 42, 0.25);
+}

@@ -54,6 +54,7 @@ def init_db():
             course TEXT DEFAULT '',
             bio TEXT DEFAULT '',
             avatar TEXT DEFAULT '',
+            theme TEXT DEFAULT 'clinical',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -70,17 +71,26 @@ def init_db():
     }.items():
         if col not in cols:
             db.execute(ddl)
+    if "theme" not in cols:
+        db.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'botanical'")
+    # One-time backfill (guarded by PRAGMA user_version so it never runs
+    # again): existing rows that never made an explicit choice adopt the
+    # new Clinical default. Later deliberate picks are left untouched.
+    if db.execute("PRAGMA user_version").fetchone()[0] < 1:
+        db.execute("UPDATE users SET theme = 'clinical' WHERE theme = 'botanical'")
+        db.execute("PRAGMA user_version = 1")
     db.commit()
 
 
 class User:
     """User model for Flask-Login."""
 
-    PROFILE_COLS = "id, username, role, approved, is_team, full_name, course, bio, avatar, created_at"
+    PROFILE_COLS = "id, username, role, approved, is_team, full_name, course, bio, avatar, theme, created_at"
 
     def __init__(self, id: int, username: str, role: str = "user", approved: bool = True,
                  is_team: bool = False,
-                 full_name: str = "", course: str = "", bio: str = "", avatar: str = ""):
+                 full_name: str = "", course: str = "", bio: str = "", avatar: str = "",
+                 theme: str = "botanical"):
         self.id = id
         self.username = username
         self.role = role
@@ -90,6 +100,7 @@ class User:
         self.course = course or ""
         self.bio = bio or ""
         self.avatar = avatar or ""
+        self.theme = theme or "botanical"
 
     @property
     def is_authenticated(self):
@@ -119,6 +130,7 @@ class User:
         return User(
             row["id"], row["username"], row["role"], row["approved"],
             row["is_team"], row["full_name"], row["course"], row["bio"], row["avatar"],
+            row["theme"],
         )
 
     @staticmethod
@@ -147,18 +159,20 @@ class User:
         return None
 
     @staticmethod
-    def create(username: str, password: str, role: str = "user", approved: bool = False):
+    def create(username: str, password: str, role: str = "user", approved: bool = False,
+               theme: str = "clinical"):
         """Create a new user with hashed password.
 
         Regular self-registrations are created with approved=False (pending).
-        Admin-created users pass approved=True.
+        Admin-created users pass approved=True. New accounts start on the
+        Clinical theme unless stated otherwise.
         """
         db = get_db()
         password_hash = generate_password_hash(password)
         try:
             cursor = db.execute(
-                "INSERT INTO users (username, password_hash, role, approved) VALUES (?, ?, ?, ?)",
-                (username, password_hash, role, 1 if approved else 0)
+                "INSERT INTO users (username, password_hash, role, approved, theme) VALUES (?, ?, ?, ?, ?)",
+                (username, password_hash, role, 1 if approved else 0, theme)
             )
             db.commit()
             return User(cursor.lastrowid, username, role, approved)
@@ -245,6 +259,13 @@ class User:
             "UPDATE users SET is_team = ? WHERE id = ?",
             (1 if is_team else 0, user_id)
         )
+        db.commit()
+
+    @staticmethod
+    def set_theme(user_id: int, theme: str):
+        """Persist the user's UI theme preference ('botanical'|'mintjulep'|'clinical')."""
+        db = get_db()
+        db.execute("UPDATE users SET theme = ? WHERE id = ?", (theme, user_id))
         db.commit()
 
     @staticmethod
