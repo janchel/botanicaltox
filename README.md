@@ -1,8 +1,10 @@
 # 🌿 BotanicalTox
 
-**Plant Toxicity Prediction Website** — a web-based machine learning tool that predicts the **activity** and **toxicity** of chemical compounds found in plants.
+**Plant Toxicity Prediction Website** — a web-based machine learning tool that predicts the **activity against OXA-23** (a carbapenem-resistant bacterial enzyme) and **toxicity to humans** of chemical compounds found in plants.
 
 Built by **The Science and Technology Education Center (STEC) — Batch of 2027**.
+
+**Research Focus**: Discovering plant-based compounds that can inhibit OXA-23 β-lactamase and restore antibiotic effectiveness, while remaining safe for human use.
 
 ---
 
@@ -47,10 +49,6 @@ cp .env.example .env
 # or
 python3 app.py
 ```
-
-Open **http://localhost:5001** and sign in.
-
-> **Default admin:** `admin` / `admin123` (⚠️ change this after first login!)
 
 ---
 
