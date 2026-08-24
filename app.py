@@ -1,7 +1,11 @@
 """
 app.py — Flask Web Application
 ===============================
-Web interface for the BotanicalTox ML pipeline. Students can:
+Web interface for the BotanicalTox ML pipeline.
+Research focus: Predicting plant compound activity against OXA-23 
+β-lactamase (antibiotic resistance enzyme) and toxicity to humans.
+
+Students can:
   - Upload training data (CSV) → train models → view graphs & metrics
   - Upload prediction data (CSV) → get predictions → download results
 
