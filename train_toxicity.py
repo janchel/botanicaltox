@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from train_common import (
+    attach_model_metadata,
     build_cli,
     evaluate_model,
     load_features_and_labels,
@@ -30,7 +31,7 @@ def main():
     print("=" * 60)
 
     print(f"\n[1/3] Loading features from: {args.features}")
-    X, y = load_features_and_labels(args.features, args.label_col)
+    X, y, descriptor_cols, impute_medians = load_features_and_labels(args.features, args.label_col)
 
     print(f"\n[2/3] Training Random Forest classifier...")
     model, best_params, splits = train_random_forest(
@@ -41,6 +42,7 @@ def main():
     print(f"\n[3/3] Evaluating model...")
     evaluate_model(model, X_train, X_test, y_train, y_test, "Toxicity", args.output_dir)
 
+    attach_model_metadata(model, descriptor_cols, impute_medians)
     save_model(model, args.model_output)
     print("\nDone! Toxicity model is ready.")
 
