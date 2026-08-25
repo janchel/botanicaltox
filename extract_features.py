@@ -61,7 +61,7 @@ def _sigfpe_protected(fn, mol):
 
 
 # Descriptors known to call CharacteristicPolynomial — need SIGFPE guard
-_SIGFPE_RISK_DESCRIPTORS = {"BalabanJ", "Ipc"}
+_SIGFPE_RISK_DESCRIPTORS = {"BalabanJ", "Ipc", "AvgIpc"}
 
 
 def _safe_balaban_j(mol):
