@@ -13,7 +13,7 @@
 </h2>
 <p class="text-muted">
     Model: {{ model_name | replace('_', ' ') | title }} ({{ tasks }}) &middot;
-    Sorted by Priority Score (Activity × Safety)
+    Priority = <code>{{ formula_display }}</code>
     {% if deduplicated is defined and not deduplicated %}
     &middot; <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Duplicates included</span>
     {% else %}

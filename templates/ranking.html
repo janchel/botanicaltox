@@ -53,6 +53,84 @@
                         <div id="fileList" class="mt-2"></div>
                     </div>
 
+                    <!-- Scoring Formula -->
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold"><i class="bi bi-calculator"></i> Scoring Formula</label>
+                        <select class="form-select" name="formula" id="formulaSelect" style="border-radius:10px;">
+                            <option value="multiplicative" selected>
+                                A × (1 − T) — Multiplicative
+                            </option>
+                            <option value="subtractive">
+                                A − T — Subtractive
+                            </option>
+                            <option value="safety_weighted">
+                                A × (1 − T²) — Safety-Weighted
+                            </option>
+                            <option value="weighted">
+                                w₁·A + w₂·(1 − T) — Weighted Linear
+                            </option>
+                        </select>
+
+                        <!-- Formula info cards (toggled by JS) -->
+                        <div class="mt-2 p-3 rounded small" style="background:#f8fafb; border:1px solid #e2e8f0;">
+                            <div id="info-multiplicative">
+                                <strong>Priority = Activity × (1 − Toxicity)</strong>
+                                <p class="mb-1 mt-1 text-muted">
+                                    Multiplicative composite. A compound must be <strong>both</strong> likely active and likely non-toxic to score high.
+                                    High toxicity pulls the score toward zero regardless of activity — a potent-but-toxic compound ranks low.
+                                </p>
+                                <p class="mb-0 text-muted"><strong>Range:</strong> 0.0 → 1.0 &nbsp;·&nbsp; <strong>Best for:</strong> general-purpose triage where both axes matter equally.</p>
+                            </div>
+                            <div id="info-subtractive" style="display:none;">
+                                <strong>Priority = Activity − Toxicity</strong>
+                                <p class="mb-1 mt-1 text-muted">
+                                    Simple difference. Values range from −1 to +1. Compounds with more safety margin than activity earn
+                                    a negative score — a useful filter for "safety-first" prioritisation.
+                                </p>
+                                <p class="mb-0 text-muted"><strong>Range:</strong> −1.0 → +1.0 &nbsp;·&nbsp; <strong>Best for:</strong> identifying compounds where safety margin outweighs raw potency.</p>
+                            </div>
+                            <div id="info-safety_weighted" style="display:none;">
+                                <strong>Priority = Activity × (1 − Toxicity²)</strong>
+                                <p class="mb-1 mt-1 text-muted">
+                                    Quadratic toxicity penalty. A compound that is 80% toxic gets penalised by 0.64 rather than 0.80 —
+                                    <strong>moderate toxicity is tolerated more</strong>, but extreme toxicity is punished harder.
+                                </p>
+                                <p class="mb-0 text-muted"><strong>Range:</strong> 0.0 → 1.0 &nbsp;·&nbsp; <strong>Best for:</strong> early-stage screening where moderate tox is acceptable.</p>
+                            </div>
+                            <div id="info-weighted" style="display:none;">
+                                <strong>Priority = w₁ · Activity + w₂ · (1 − Toxicity)</strong>
+                                <p class="mb-1 mt-1 text-muted">
+                                    Adjustable linear blend. Move the sliders to shift emphasis toward potency (activity) or safety.
+                                    Both weights are normalised to sum to 1 — the sliders control the relative importance of each axis.
+                                </p>
+                                <p class="mb-0 text-muted"><strong>Range:</strong> 0.0 → 1.0 &nbsp;·&nbsp; <strong>Best for:</strong> comparing different weighting strategies side-by-side.</p>
+                            </div>
+
+                            <!-- Weight sliders (only for weighted formula) -->
+                            <div id="weightSliders" style="display:none;" class="mt-3">
+                                <div class="row">
+                                    <div class="col-6">
+                                        <label class="form-label small text-muted mb-1">
+                                            Activity weight (w₁): <strong id="w1Label">0.50</strong>
+                                        </label>
+                                        <input type="range" class="form-range" name="weight_activity" id="weightActivity"
+                                               min="0" max="100" value="50" step="5">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label small text-muted mb-1">
+                                            Safety weight (w₂): <strong id="w2Label">0.50</strong>
+                                        </label>
+                                        <input type="range" class="form-range" name="weight_safety" id="weightSafety"
+                                               min="0" max="100" value="50" step="5">
+                                    </div>
+                                </div>
+                                <div class="mt-2 p-2 rounded" style="background:#fff3cd; border:1px solid #ffc107;">
+                                    <code class="small" id="formulaPreview">Priority = 0.50 × A + 0.50 × S</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Deduplication Option -->
                     <div class="mb-4">
                         <div class="form-check form-switch">
@@ -79,15 +157,15 @@
         <div class="card mt-4">
             <div class="card-header"><i class="bi bi-info-circle"></i> How Ranking Works</div>
             <div class="card-body">
-                <p class="small text-muted mb-2">
-                    <strong>Safety Score = 1 − Toxicity Score</strong><br>
-                    <strong>Priority Score = Activity Score × Safety Score</strong>
+                <p class="small text-muted mb-2" id="howItWorksDesc">
+                    <strong>Priority = Activity × Safety</strong><br>
+                    A compound must be <strong>BOTH likely active AND likely non-toxic</strong> to rank high.
+                    High toxicity drags the whole score down (even if active). Top 15 compounds are shown, sorted best → worst.
                 </p>
-                <ul class="small text-muted mb-0">
-                    <li>A compound must be <strong>BOTH likely active AND likely non-toxic</strong> to rank high</li>
-                    <li>High activity + high safety = <strong>Best drug candidate</strong> (high score)</li>
-                    <li>High toxicity drags the whole score down (even if active)</li>
-                    <li>Top 15 compounds are shown, sorted best → worst</li>
+                <ul class="small text-muted mb-0" id="howItWorksList">
+                    <li><strong>High activity + high safety</strong> → Best drug candidate (high score)</li>
+                    <li><strong>High toxicity</strong> → Low score regardless of activity</li>
+                    <li><strong>Compare formulas</strong> to see how different scoring strategies affect the ranking</li>
                 </ul>
             </div>
         </div>
@@ -121,6 +199,49 @@ function updateFileList() {
         list.innerHTML += '<span class="badge bg-light text-dark me-1 mb-1">📄 ' + f.name + '</span>';
     }
 }
+
+// Formula selector toggle
+const formulaSelect = document.getElementById('formulaSelect');
+const formulas = ['multiplicative', 'subtractive', 'safety_weighted', 'weighted'];
+const sliderRow = document.getElementById('weightSliders');
+const w1Slider = document.getElementById('weightActivity');
+const w2Slider = document.getElementById('weightSafety');
+const w1Label = document.getElementById('w1Label');
+const w2Label = document.getElementById('w2Label');
+const formulaPreview = document.getElementById('formulaPreview');
+
+function updateFormulaInfo() {
+    const chosen = formulaSelect.value;
+    formulas.forEach(f => {
+        const el = document.getElementById('info-' + f);
+        if (el) el.style.display = (f === chosen) ? '' : 'none';
+    });
+    sliderRow.style.display = (chosen === 'weighted') ? '' : 'none';
+
+    // Update bottom info box
+    const descs = {
+        multiplicative:  '<strong>Priority = Activity × Safety</strong><br>A compound must be <strong>BOTH likely active AND likely non-toxic</strong> to rank high. High toxicity drags the score toward zero regardless of activity.',
+        subtractive:     '<strong>Priority = Activity − Toxicity</strong><br>Simple difference — values range from −1 to +1. Compounds where safety margin exceeds activity earn a negative score.',
+        safety_weighted: '<strong>Priority = Activity × (1 − Toxicity²)</strong><br>Quadratic penalty — moderate toxicity is tolerated more, but extreme toxicity is punished harder.',
+        weighted:        '<strong>Priority = w₁ · Activity + w₂ · Safety</strong><br>Adjustable blend — move the sliders to shift emphasis toward potency or safety.'
+    };
+    document.getElementById('howItWorksDesc').innerHTML = descs[chosen] || descs.multiplicative;
+}
+formulaSelect.addEventListener('change', updateFormulaInfo);
+
+// Weight slider preview
+function updateWeights() {
+    let w1 = parseInt(w1Slider.value);
+    let w2 = parseInt(w2Slider.value);
+    const sum = w1 + w2;
+    const nw1 = sum === 0 ? 0.5 : w1 / sum;
+    const nw2 = sum === 0 ? 0.5 : w2 / sum;
+    w1Label.textContent = nw1.toFixed(2);
+    w2Label.textContent = nw2.toFixed(2);
+    formulaPreview.textContent = 'Priority = ' + nw1.toFixed(2) + ' × A + ' + nw2.toFixed(2) + ' × S';
+}
+w1Slider.addEventListener('input', updateWeights);
+w2Slider.addEventListener('input', updateWeights);
 
 document.getElementById('rankForm').addEventListener('submit', () => {
     const btn = document.getElementById('submitBtn');
