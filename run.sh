@@ -15,7 +15,11 @@ set -e
 cd "$(dirname "$0")"
 
 PY=python3
-if [ -x venv/bin/python ]; then
+CONDA_PY="$HOME/miniforge3/envs/botanicaltox/bin/python"
+if [ -x "$CONDA_PY" ]; then
+    PY="$CONDA_PY"
+    echo "Using conda environment: botanicaltox (RDKit $($PY -c 'import rdkit;print(rdkit.__version__)'))"
+elif [ -x venv/bin/python ]; then
     PY=venv/bin/python
     echo "Using project virtual environment: venv/"
 fi
