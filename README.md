@@ -14,27 +14,31 @@ Built by **The Science and Technology Education Center (STEC) — Batch of 2027*
 - **Export test results** — after training, download the held-out **test-set predictions** and a one-row **metrics summary** as CSV (mirrors the students' Colab notebook 1.6a/2.6a).
 - **Predict compounds** — upload SMILES and get instant activity & toxicity predictions (downloadable as CSV).
 - **Plant search** — enter a plant name; the app looks up its known compounds (PubChem) and predicts their properties.
-- **Rank compounds** — sort candidates by a priority score (Activity × Safety), so the top compounds are both likely active AND non-toxic.
+- **Rank compounds** — sort candidates by 4 selectable priority formulas: Multiplicative (Activity × Safety), Subtractive, Safety-Weighted, or Weighted (custom importance).
 - **Team page** — public page showcasing student members with profiles and pictures.
 - **User accounts** — login/registration with **admin approval**, and admin **promote/demote** of other admins.
 - **Model ownership** — only the owner (or an admin) can delete a trained model.
 
-### ML pipeline highlights (v3)
+### ML pipeline highlights (v4)
 - **Scaffold-aware splitting** — no near-duplicate leakage between train/test.
-- **Probability calibration** — trustworthy, comparable scores.
+- **Probability calibration** — trustworthy, comparable scores (sigmoid for activity, isotonic for toxicity).
 - **Training-median imputation** — consistent preprocessing at prediction time.
-- **Robust descriptor cleaning** — handles RDKit edge cases.
+- **Robust descriptor cleaning** — handles RDKit edge cases (SIGFPE protection for BalabanJ/Ipc/AvgIpc).
+- **Notebook-aligned** — GridSearchCV with MCC scoring, 217+4 features (RDKit 2026.03).
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Setup
+### 1. Install Miniforge + Conda Env (recommended)
 ```bash
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
+bash Miniforge3-Linux-x86_64.sh -b -p $HOME/miniforge3
+source $HOME/miniforge3/bin/activate
+
+conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge -y
+conda activate botanicaltox
 pip install -r requirements.txt
-pip install "numpy<2"             # required by rdkit-pypi
 ```
 
 ### 2. Configure (optional)
@@ -45,9 +49,9 @@ cp .env.example .env
 
 ### 3. Run
 ```bash
-./run.sh                          # uses venv automatically
+./run.sh                          # auto-detects conda env
 # or
-python3 app.py
+conda activate botanicaltox && python3 app.py
 ```
 
 ---
@@ -134,7 +138,7 @@ After training on these, run a prediction on `prediction_compounds.xlsx` and vie
 
 - Predictions are **computational** — always validate with experimental testing.
 - The AI explainer is optional; if no API key is set (or the network is unavailable) it is disabled gracefully.
-- `refinedd_code.ipynb` and `final_destination.ipynb` are experimental research notebooks (not part of the web app). `final_destination.ipynb` is the students' reference implementation: crash-safe RDKit descriptors (excludes `BalabanJ`/`Ipc`/`AvgIpc`), scaffold-aware splitting, isotonic/sigmoid calibration, `Priority = Activity × Safety`, and test-set CSV exports. It reads its data from `datasets/` (or bare filenames, e.g. in Colab).
+- `CRABLOX_Colab_Complete_Pipeline.ipynb` is the reference notebook pipeline. It uses 217 RDKit descriptors (RDKit 2026.03+), GridSearchCV with MCC scoring, and isotonic/sigmoid calibration. The web app's training pipeline now matches this notebook's approach (Spearman rank correlation ~0.90).
 
 ---
 
