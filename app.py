@@ -811,8 +811,8 @@ def train():
         for task_key, label_col, display_name in tasks_to_train:
             X, y, descriptor_cols, impute_medians = load_features_and_labels(str(features_path), label_col)
             model, best_params, splits = train_random_forest(
-                X, y, random_state=42, tune=tune, n_iter=30 if tune else 0,
-                groups=scaffold_groups,
+                X, y, random_state=42, tune=tune,
+                groups=scaffold_groups, task=task_key,
             )
             X_train, X_test, y_train, y_test = splits
 

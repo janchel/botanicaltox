@@ -33,8 +33,8 @@ from sklearn.metrics import (
 )
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import (
+    GridSearchCV,
     GroupShuffleSplit,
-    RandomizedSearchCV,
     StratifiedGroupKFold,
     StratifiedKFold,
     train_test_split,
@@ -178,26 +178,26 @@ def train_random_forest(
     y: pd.Series,
     random_state: int = 42,
     tune: bool = True,
-    n_iter: int = 60,
     cv_folds: int = 5,
     groups: pd.Series | None = None,
     calibrate: bool = True,
+    scoring: str = "matthews_corrcoef",
+    task: str | None = None,
 ) -> tuple[object, dict]:
     """
     Train a Random Forest classifier with optional hyperparameter tuning.
 
-    Notebook-inspired improvements:
+    Notebook-compatible (CRABLOX_Colab_Complete_Pipeline.ipynb):
+      - GridSearchCV with MCC scoring (not RandomizedSearchCV with ROC-AUC)
       - Scaffold-aware split/CV (pass `groups`, e.g. InChIKey scaffold blocks)
-        so near-duplicate compounds never leak across train/test.
-      - Probability calibration (CalibratedClassifierCV) so raw RF
-        probabilities can be meaningfully multiplied into a priority score.
+      - Probability calibration (CalibratedClassifierCV)
+      - Task-specific param grids when task is "activity" or "toxicity"
 
     Parameters
     ----------
     tune : bool
-        If True, run RandomizedSearchCV. If False, use sensible defaults.
-    n_iter : int
-        Number of randomized search iterations.
+        If True, run GridSearchCV over the notebook's parameter grid.
+        If False, use sensible defaults.
     cv_folds : int
         Cross-validation folds for hyperparameter search.
     groups : pd.Series, optional
@@ -205,6 +205,10 @@ def train_random_forest(
         train/test split and CV become group-aware.
     calibrate : bool
         Wrap the final model in CalibratedClassifierCV.
+    scoring : str
+        Scoring metric for grid search. Default "matthews_corrcoef" (matches notebook).
+    task : str, optional
+        "activity" or "toxicity" — selects the notebook's parameter grid for that task.
 
     Returns
     -------
@@ -232,50 +236,64 @@ def train_random_forest(
         print(f"  Train set: {X_train.shape[0]} | Test set: {X_test.shape[0]}")
 
     if tune:
-        # Auto-adjust CV folds for small datasets
-        min_class_count = min(y_train.value_counts())
-        actual_folds = min(cv_folds, min_class_count, 5)
-        if actual_folds < 2:
-            actual_folds = 2
-        if actual_folds < cv_folds:
-            print(f"  ⚠️  Small dataset detected — reduced CV from {cv_folds} to {actual_folds} folds")
+        # Notebook-compatible parameter grids (CRABLOX_Colab_Complete_Pipeline.ipynb)
+        if task == "toxicity":
+            param_grid = {
+                "n_estimators": [200, 300],
+                "max_depth": [8, 10, 12],
+                "min_samples_leaf": [4, 8],
+                "max_features": ["sqrt"],
+                "class_weight": ["balanced"],
+            }
+        elif task == "activity":
+            param_grid = {
+                "n_estimators": [200, 300],
+                "max_depth": [6, 8, 10],
+                "min_samples_leaf": [3, 5, 8],
+                "max_features": ["sqrt"],
+                "class_weight": ["balanced"],
+            }
+        else:
+            # Fallback: combined grid
+            param_grid = {
+                "n_estimators": [200, 300],
+                "max_depth": [6, 8, 10, 12],
+                "min_samples_leaf": [3, 4, 5, 8],
+                "max_features": ["sqrt"],
+                "class_weight": ["balanced"],
+            }
 
-        param_dist = {
-            "n_estimators": [100, 200, 300, 500],
-            "max_depth": [None, 10, 20, 30, 50],
-            "min_samples_split": [2, 5, 10],
-            "min_samples_leaf": [1, 2, 4],
-            "max_features": ["sqrt", "log2", None],
-            "class_weight": ["balanced", "balanced_subsample", None],
-            "bootstrap": [True, False],
-        }
+        # Auto-adjust CV folds for small datasets (notebook uses min(5, class_count))
+        min_class_count = min(y_train.value_counts())
+        if task == "activity":
+            actual_folds = max(2, min(cv_folds, min_class_count))
+        else:
+            actual_folds = 5  # notebook uses fixed 5 for toxicity
+        if actual_folds < cv_folds:
+            print(f"  ⚠️  Small dataset detected — CV folds: {actual_folds}")
 
         if groups_train is not None:
             # Scaffold-grouped CV (never leaks near-duplicates into a fold)
             n_groups = groups_train.nunique()
             group_folds = max(2, min(actual_folds, n_groups))
             cv = StratifiedGroupKFold(n_splits=group_folds, shuffle=True, random_state=random_state)
-            search = RandomizedSearchCV(
+            search = GridSearchCV(
                 RandomForestClassifier(random_state=random_state),
-                param_distributions=param_dist,
-                n_iter=n_iter,
+                param_grid=param_grid,
                 cv=cv,
-                scoring="roc_auc",
+                scoring=scoring,
                 n_jobs=-1,
-                random_state=random_state,
                 verbose=1,
             )
             search.fit(X_train, y_train, groups=groups_train)
         else:
             cv = StratifiedKFold(n_splits=actual_folds, shuffle=True, random_state=random_state)
-            search = RandomizedSearchCV(
+            search = GridSearchCV(
                 RandomForestClassifier(random_state=random_state),
-                param_distributions=param_dist,
-                n_iter=n_iter,
+                param_grid=param_grid,
                 cv=cv,
-                scoring="roc_auc",
+                scoring=scoring,
                 n_jobs=-1,
-                random_state=random_state,
                 verbose=1,
             )
             search.fit(X_train, y_train)
@@ -283,7 +301,7 @@ def train_random_forest(
         model = search.best_estimator_
         best_params = search.best_params_
         print(f"  Best params: {best_params}")
-        print(f"  Best CV ROC-AUC: {search.best_score_:.4f}")
+        print(f"  Best CV {scoring}: {search.best_score_:.4f}")
     else:
         model = RandomForestClassifier(
             n_estimators=300,
@@ -294,9 +312,14 @@ def train_random_forest(
         model.fit(X_train, y_train)
         best_params = model.get_params()
 
-    # ── Calibrate probabilities (isotonic for larger data, sigmoid otherwise) ──
+    # ── Calibrate probabilities (notebook: isotonic for toxicity, sigmoid for activity) ──
     if calibrate:
-        method = "isotonic" if len(X_train) >= 1000 else "sigmoid"
+        if task == "toxicity":
+            method = "isotonic"
+        elif task == "activity":
+            method = "sigmoid"
+        else:
+            method = "isotonic" if len(X_train) >= 1000 else "sigmoid"
         cal_folds = max(2, min(5, len(X_train)))
         model = CalibratedClassifierCV(model, method=method, cv=cal_folds)
         model.fit(X_train, y_train)
