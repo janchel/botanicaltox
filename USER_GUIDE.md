@@ -1,6 +1,6 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║     BotanicalTox — USER GUIDE                                                     ║
+║     CRABLOX — USER GUIDE                                                     ║
 ║     How to Predict Plant Compound Toxicity                              ║
 ║     Version 3.2 — August 2026                                                  ║
 ║                                                                              ║
@@ -9,7 +9,7 @@
 
 WHAT IS THIS APP?
 ─────────────────
-BotanicalTox is a Machine Learning prediction tool for plant toxicity. It predicts the toxicity of
+CRABLOX is a Machine Learning prediction tool for plant toxicity. It predicts the toxicity of
 chemical compounds found in plants:
 
   1. TOXICITY   — Is this compound likely toxic to humans?

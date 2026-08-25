@@ -1,4 +1,4 @@
-# 🌿 BotanicalTox
+# 🌿 CRABLOX
 
 **Plant Toxicity Prediction Website** — a web-based machine learning tool that predicts the **activity against OXA-23** (a carbapenem-resistant bacterial enzyme) and **toxicity to humans** of chemical compounds found in plants.
 
@@ -36,8 +36,8 @@ curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Mi
 bash Miniforge3-Linux-x86_64.sh -b -p $HOME/miniforge3
 source $HOME/miniforge3/bin/activate
 
-conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge -y
-conda activate botanicaltox
+conda create -n crablox python=3.10 rdkit=2026.03 -c conda-forge -y
+conda activate crablox
 pip install -r requirements.txt
 ```
 
@@ -51,7 +51,7 @@ cp .env.example .env
 ```bash
 ./run.sh                          # auto-detects conda env
 # or
-conda activate botanicaltox && python3 app.py
+conda activate crablox && python3 app.py
 ```
 
 ---
@@ -142,4 +142,4 @@ After training on these, run a prediction on `prediction_compounds.xlsx` and vie
 
 ---
 
-© 2026 BotanicalTox — Plant Toxicity Prediction. All Rights Reserved by The Science and Technology Education Center (STEC), Batch of 2027.
+© 2026 CRABLOX — Plant Toxicity Prediction. All Rights Reserved by The Science and Technology Education Center (STEC), Batch of 2027.
