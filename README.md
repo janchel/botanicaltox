@@ -125,6 +125,39 @@ After training on these, run a prediction on `prediction_compounds.xlsx` and vie
 
 ---
 
+## 🔄 Notebook → App Pipeline (feature/pipeline-alignment)
+
+The reference pipeline lives in `CRABLOX_Colab_Complete_Pipeline.ipynb` — a Colab notebook that trains Random Forest models on molecular descriptors, evaluates them, and ranks compounds by a priority score. This branch aligns the Flask web app so its training pipeline matches the notebook step-by-step.
+
+### What the notebook does
+
+| Step | Notebook code | What it does |
+|------|--------------|--------------|
+| 1 | `CalcDescriptors(mols, desc_list)` | Computes 217 molecular descriptors via RDKit 2026.03 |
+| 2 | `wiener_index(mol)`, `zagreb_indices(mol)`, `BalabanJ` | Adds 4 topological indices (Wiener, Zagreb M1/M2, BalabanJ) → 221 features total |
+| 3 | `StratifiedGroupKFold` / `GroupShuffleSplit` | Scaffold-aware train/test split — compounds with the same scaffold never leak across splits |
+| 4 | `GridSearchCV(..., scoring= MCC)` | Hyperparameter search optimizing Matthews Correlation Coefficient (not accuracy or AUC) |
+| 5 | `isotonic_regression` (toxicity) / `sigmoid` (activity) | Calibrates prediction probabilities so scores are comparable across models |
+| 6 | `Priority = Activity_Score × (1 − Toxicity_Score)` | Ranks compounds — high activity + low toxicity = top priority |
+
+### What we changed in the app to match
+
+| App file | Change | Why |
+|----------|--------|-----|
+| `extract_features.py` | Re-enabled BalabanJ, added Ipc/AvgIpc with SIGFPE protection, added `_largest_fragment()` for Wiener/Zagreb | Notebook uses all 217+4 descriptors; old app excluded BalabanJ and used whole-molecule topological indices |
+| `train_common.py` | Switched from `RandomizedSearchCV(ROC-AUC)` to `GridSearchCV(MCC)`, added task-specific param grids, task-specific calibration (sigmoid=activity, isotonic=toxicity) | Notebook uses MCC scoring and different calibration per task |
+| `train_common.py` | `load_features_and_labels()` now returns 4-tuple `(X, y, descriptor_cols, impute_medians)` with median imputation + drop cols >5% NaN | Matches notebook's preprocessing: impute with training medians, drop unstable descriptors |
+| `run.sh` | Prefers conda env `~/miniforge3/envs/crablox/` over pip venv | RDKit 2026.03 (217 descriptors) is only available via conda-forge, not pip |
+| `app.py` | Training routes unpack 4-tuple, pass `task=` to `train_random_forest()` | Wires up the new calibration and param grid logic per task |
+
+### Verification
+
+After these changes, training on the notebook's own data (`datasets/_ACTIVITY__105_COMPOUNDS_FINAL_TRAINING.csv` and `datasets/toxicity_compounds.csv`) produces ranked results with **Spearman rank correlation ≈ 0.90** against the notebook's output. The remaining ~10% gap comes from non-determinism in the cross-validation splits (GroupShuffleSplit has inherent randomness).
+
+Top compound in both: `445881` — confirmed matching.
+
+---
+
 ## 📚 Documentation
 
 - **`USER_GUIDE.md`** — full how-to for students
@@ -138,7 +171,6 @@ After training on these, run a prediction on `prediction_compounds.xlsx` and vie
 
 - Predictions are **computational** — always validate with experimental testing.
 - The AI explainer is optional; if no API key is set (or the network is unavailable) it is disabled gracefully.
-- `CRABLOX_Colab_Complete_Pipeline.ipynb` is the reference notebook pipeline. It uses 217 RDKit descriptors (RDKit 2026.03+), GridSearchCV with MCC scoring, and isotonic/sigmoid calibration. The web app's training pipeline now matches this notebook's approach (Spearman rank correlation ~0.90).
 
 ---
 
