@@ -100,7 +100,7 @@ Example training rows:
 
 ## 📊 Student Research Datasets (`datasets/`)
 
-These are the actual datasets used by the STEC research notebook (`final_destination.ipynb`) — upload them directly in the **Train** page to reproduce the study's models:
+These are the actual datasets used by the STEC research notebook (`CRABLOX_Colab_Complete_Pipeline.ipynb`) — upload them directly in the **Train** page to reproduce the study's models:
 
 | File | Contents |
 |------|----------|
