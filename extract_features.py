@@ -43,21 +43,30 @@ def _sigfpe_handler(signum, frame):
     raise _SIGFPEError("SIGFPE: floating-point exception")
 
 
-def _safe_balaban_j(mol):
-    """Compute BalabanJ with SIGFPE protection.
+def _sigfpe_protected(fn, mol):
+    """Call an RDKit descriptor function with SIGFPE protection.
 
-    BalabanJ calls CharacteristicPolynomial → numpy.dot which can raise
-    SIGFPE (a C-level signal, not a Python exception) on certain molecule
-    topologies.  We install a temporary SIGFPE handler, try the call, and
-    return NaN on failure so the molecule isn't lost entirely.
+    Descriptors that call CharacteristicPolynomial (BalabanJ, Ipc, AvgIpc)
+    can trigger SIGFPE via numpy.dot — a C-level signal that Python's
+    except won't catch.  We install a temporary handler and return NaN
+    on failure so the molecule isn't lost entirely.
     """
     old_handler = signal.signal(signal.SIGFPE, _sigfpe_handler)
     try:
-        return Descriptors.BalabanJ(mol)
+        return fn(mol)
     except (_SIGFPEError, Exception):
         return np.nan
     finally:
         signal.signal(signal.SIGFPE, old_handler)
+
+
+# Descriptors known to call CharacteristicPolynomial — need SIGFPE guard
+_SIGFPE_RISK_DESCRIPTORS = {"BalabanJ", "Ipc"}
+
+
+def _safe_balaban_j(mol):
+    """Compute BalabanJ with SIGFPE protection."""
+    return _sigfpe_protected(Descriptors.BalabanJ, mol)
 
 
 def parse_smiles_column(df: pd.DataFrame) -> str:
@@ -120,10 +129,7 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
       - on failure: recompute descriptor-by-descriptor, skipping any that
         raise and leaving a NaN for that cell (later imputed/cleaned).
     """
-    _EXCLUDE_DESCRIPTORS = {
-        "Ipc",       # calls CharacteristicPolynomial → same crash
-        "AvgIpc",    # calls Ipc → same crash
-    }
+    _EXCLUDE_DESCRIPTORS = set()  # all descriptors included; SIGFPE-risk ones handled in _safe_row
     descriptor_names = [
         x[0] for x in Descriptors._descList if x[0] not in _EXCLUDE_DESCRIPTORS
     ]
@@ -147,9 +153,8 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
         row = []
         for name in descriptor_names:
             try:
-                # BalabanJ can SIGFPE — use protected wrapper
-                if name == "BalabanJ":
-                    row.append(_safe_balaban_j(mol))
+                if name in _SIGFPE_RISK_DESCRIPTORS:
+                    row.append(_sigfpe_protected(descriptor_fns[name], mol))
                 else:
                     row.append(descriptor_fns[name](mol))
             except Exception:
@@ -169,29 +174,45 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
     return result.clip(lower=-1e10, upper=1e10)
 
 
+def _largest_fragment(mol):
+    """Return the largest connected fragment of a molecule.
+
+    For salts or multi-component SMILES (e.g. 'CC(=O)O.[Na]'), topological
+    indices are undefined across disconnected fragments.  We use the largest
+    fragment (by atom count) — consistent with the notebook's approach.
+    """
+    mol_noh = Chem.RemoveHs(mol)
+    frags = Chem.GetMolFrags(mol_noh, asMols=True, sanitizeFrags=False)
+    if not frags:
+        return mol_noh
+    return max(frags, key=lambda m: m.GetNumAtoms())
+
+
 def wiener_index(mol) -> float:
     """
     Wiener index: sum of shortest-path (topological) distances between every
     pair of heavy atoms in the molecular graph.
+    Computed on the largest connected fragment (handles salts properly).
     """
-    mol_noh = Chem.RemoveHs(mol)
-    dist_matrix = Chem.GetDistanceMatrix(mol_noh)
+    frag = _largest_fragment(mol)
+    dist_matrix = Chem.GetDistanceMatrix(frag)
     return float(np.sum(dist_matrix) / 2)
 
 
 def zagreb_indices(mol) -> tuple:
     """
     First (M1) and Second (M2) Zagreb indices, computed on the heavy-atom graph.
+    Computed on the largest connected fragment (handles salts properly).
 
     M1 = sum of squared vertex degrees.
     M2 = sum, over all bonds, of the product of the degrees of its two endpoint atoms.
     """
-    mol_noh = Chem.RemoveHs(mol)
-    degrees = [atom.GetDegree() for atom in mol_noh.GetAtoms()]
+    frag = _largest_fragment(mol)
+    degrees = [atom.GetDegree() for atom in frag.GetAtoms()]
     m1 = sum(d ** 2 for d in degrees)
     m2 = sum(
         bond.GetBeginAtom().GetDegree() * bond.GetEndAtom().GetDegree()
-        for bond in mol_noh.GetBonds()
+        for bond in frag.GetBonds()
     )
     return m1, m2
 

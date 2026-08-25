@@ -99,12 +99,22 @@ def load_features_and_labels(
     label_col: str,
     id_col: str | None = None,
     smiles_col: str = "Smiles",
-) -> tuple[pd.DataFrame, pd.Series]:
+) -> tuple[pd.DataFrame, pd.Series, list, dict]:
     """
     Load the feature matrix and extract the target label column.
 
     Automatically drops non-feature columns (compound IDs, SMILES, mol, any
     already-present label columns) from X.
+
+    Returns (X, y, descriptor_cols, impute_medians) — the descriptor columns
+    and median-imputation dict are needed to attach as model metadata so
+    predictions use the same preprocessing.
+
+    Cleaning follows the notebook's clean_descriptor_matrix:
+      1. Replace inf with NaN
+      2. Mask extreme values (|x| > 1e10)
+      3. Drop columns with >5% NaN (unstable descriptors)
+      4. Impute remaining NaN with column medians
     """
     path = Path(features_path)
     if path.suffix.lower() in (".xlsx", ".xls"):
@@ -138,15 +148,27 @@ def load_features_and_labels(
     # Ensure all feature columns are numeric; drop non-numeric
     X = X.select_dtypes(include=[np.number])
 
-    # Clean infinite/NaN values that break scikit-learn
+    # Clean: replace inf → NaN, mask extreme values
     X = X.replace([np.inf, -np.inf], np.nan)
-    X = X.fillna(0)
-    # Clip extreme values to float32-safe range
+    X = X.mask(X.abs() > 1e10)
+
+    # Drop columns with >5% NaN (unstable descriptors — same as notebook)
+    nan_frac = X.isna().mean()
+    keep_cols = nan_frac[nan_frac <= 0.05].index.tolist()
+    if not keep_cols:
+        keep_cols = list(X.columns[:1])  # safety: never empty
+    X = X[keep_cols]
+
+    # Impute remaining NaN with column medians (same as notebook)
+    impute_medians = X.median().to_dict()
+    X = X.fillna(impute_medians)
+
+    # Clip extreme values
     X = X.clip(lower=-1e10, upper=1e10)
 
     print(f"  Features: {X.shape[1]} columns, {X.shape[0]} samples")
     print(f"  Labels:   class distribution =\n{y.value_counts().to_string()}")
-    return X, y
+    return X, y, keep_cols, impute_medians
 
 
 # ── Model Training ──────────────────────────────────────────────────────────
