@@ -35,7 +35,7 @@ def main():
 
     print(f"\n[2/3] Training Random Forest classifier...")
     model, best_params, splits = train_random_forest(
-        X, y, random_state=args.seed, tune=not args.no_tune
+        X, y, random_state=args.seed, tune=not args.no_tune, task="toxicity"
     )
     X_train, X_test, y_train, y_test = splits
 
