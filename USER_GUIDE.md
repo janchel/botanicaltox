@@ -96,7 +96,7 @@ BEFORE YOU START — The Workflow
     text, RDKit automatically computes:
 
     ┌──────────────────────────────────────────────────────────────┐
-    │  208 STANDARD DESCRIPTORS (computed automatically)          │
+    │  217 STANDARD DESCRIPTORS (computed automatically)          │
     │                                                              │
     │  Molecular Weight (MolWt)       LogP (MolLogP)              │
     │  Polar Surface Area (TPSA)      H-Bond Donors (NumHDonors)  │
@@ -107,14 +107,18 @@ BEFORE YOU START — The Workflow
     │  PEOE / SMR / SlogP VSA (30+)   Morgan fingerprints         │
     │  Fragment counts (85+)          ... and 80+ more            │
     │                                                              │
-    │  3 TOPOLOGICAL INDICES (also automatic)                     │
+    │  4 TOPOLOGICAL INDICES (also automatic)                     │
     │                                                              │
     │  Wiener Index   — molecular compactness                     │
     │  Zagreb M1/M2   — branching complexity                      │
     │  Balaban J      — molecular shape                           │
     │                                                              │
-    │  TOTAL: 211 numerical features from ONE SMILES string       │
+    │  TOTAL: 221 numerical features from ONE SMILES string       │
     └──────────────────────────────────────────────────────────────┘
+
+    ⚠️  Requires RDKit 2026.03+ (conda-forge). The old pip rdkit-pypi
+        package (2022.09) only gives 208 descriptors and does NOT
+        match the Colab notebook's descriptor set.
 
     This is why your CSV only needs TWO columns:
       • Smiles       → The structure (input)
@@ -337,7 +341,7 @@ BEFORE YOU START — The Workflow
     You don't know yet if the compound is active or toxic — that's
     exactly what the model will predict for you.
 
-    Just like training, RDKit automatically computes all 211 molecular
+    Just like training, RDKit automatically computes all 221 molecular
     descriptors from each SMILES string. You don't need to add any
     chemical properties to the file.
 
@@ -864,7 +868,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
 
     STEP 3: COMPUTE DESCRIPTORS
     ─────────────────────────────
-    RDKit calculates 211 numbers from the molecular graph:
+    RDKit calculates 221 numbers from the molecular graph:
 
     ┌──────────────────────┬────────────────────┬──────────────────┐
     │  Descriptor          │  What It Measures   │  Ethanol Value   │
@@ -907,7 +911,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     │ C1=CC..│  78.1 │   2.13 │  0.0 │   1  │ ... │  1  │
     │ CC(=O)O│  60.1 │  -0.17 │ 37.3 │   0  │ ... │  0  │
     └────────┴───────┴────────┴──────┴──────┴─────┴─────┘
-    90 rows × 211 columns = 18,990 numbers for the model to learn from.
+    90 rows × 221 columns = 19,890 numbers for the model to learn from.
 
     STEP 5: TRAIN THE RANDOM FOREST
     ─────────────────────────────────
@@ -941,7 +945,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
 8.4  Data Size vs. Descriptors
 ────────────────────────────────
 
-    With 211 descriptors but only 10 compounds, the model has more
+    With 221 descriptors but only 10 compounds, the model has more
     "questions" than "answers" — it can memorize but not generalize.
     This causes overfitting.
 

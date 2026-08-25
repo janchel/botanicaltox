@@ -162,24 +162,33 @@
 
     All in requirements.txt:
 
-    │ Package       │ Purpose                              │
-    │───────────────│──────────────────────────────────────│
-    │ rdkit         │ Molecular descriptor calculation     │
-    │ pandas        │ CSV/data handling                    │
-    │ scikit-learn  │ Random Forest ML                     │
-    │ matplotlib    │ Graph generation                     │
-    │ seaborn       │ Confusion matrix heatmaps            │
-    │ numpy         │ Numerical computation                │
-    │ openpyxl      │ Excel file support                   │
-    │ joblib        │ Model save/load                      │
-    │ flask         │ Web framework                        │
-    │ flask-login   │ User authentication & sessions       │
-    │ gunicorn      │ Production WSGI server               │
-    │ openai        │ AI explainer client                  │
+    │ Package       │ Purpose                              │ Min Version     │
+    │───────────────│──────────────────────────────────────│──────────────────│
+    │ rdkit         │ Molecular descriptor calculation     │ 2026.03+ (conda)│
+    │ pandas        │ CSV/data handling                    │ 2.0              │
+    │ scikit-learn  │ Random Forest ML                     │ 1.3              │
+    │ matplotlib    │ Graph generation                     │ 3.7              │
+    │ seaborn       │ Confusion matrix heatmaps            │ 0.12             │
+    │ numpy         │ Numerical computation                │ 1.24             │
+    │ openpyxl      │ Excel file support                   │ 3.1              │
+    │ joblib        │ Model save/load                      │ 1.3              │
+    │ flask         │ Web framework                        │ 3.0              │
+    │ flask-login   │ User authentication & sessions       │ 0.6              │
+    │ gunicorn      │ Production WSGI server               │ 22.0             │
+    │ openai        │ AI explainer client                  │ 1.0              │
 
-    ⚠️  IMPORTANT: rdkit-pypi requires NumPy < 2.
-        If you get "_ARRAY_API not found" errors:
-            pip install "numpy<2"
+    ⚠️  CRITICAL: RDKit version matters!
+
+        The app now requires RDKit 2026.03+ (217 molecular descriptors).
+        The old pip package "rdkit-pypi" is stuck at 2022.09 (208 descriptors)
+        and does NOT match the Colab notebook's descriptor set.
+
+        USE CONDA/MINIFORGE (not pip) for RDKit:
+            conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge
+
+        If you use pip's rdkit-pypi, you get 208 descriptors and your
+        ranking results will NOT match the notebook (Spearman ~0.86).
+        With conda's RDKit 2026+, you get 217 descriptors (Spearman ~0.90).
 
 2.3  Optional
 ───────────────
@@ -198,22 +207,37 @@
 3.1  Clone the Repository
 ───────────────────────────
 
-    git clone https://github.com/YOUR_USER/drug_ai.git
-    cd drug_ai
+    git clone https://github.com/janchel/botanicaltox.git
+    cd botanicaltox
 
-3.2  Create Virtual Environment
-─────────────────────────────────
+3.2  Install Miniforge (conda) — RECOMMENDED
+──────────────────────────────────────────────
 
-    python3 -m venv venv
-    source venv/bin/activate          # Linux/macOS
-    # OR: venv\Scripts\activate       # Windows
+    # Download and install Miniforge (lightweight conda)
+    curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
+    bash Miniforge3-Linux-x86_64.sh -b -p $HOME/miniforge3
+    source $HOME/miniforge3/bin/activate
 
-3.3  Install Dependencies
-───────────────────────────
+    # Create the botanicaltox environment with RDKit 2026+
+    conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge -y
+    conda activate botanicaltox
 
+    # Install remaining dependencies via pip
     pip install -r requirements.txt
 
-    # Fix NumPy compatibility if needed:
+    ⚠️  DO NOT install rdkit-pypi via pip — it's stuck at 2022.09 (208 descriptors).
+        The conda-forge rdkit package gives you 2026.03+ (217 descriptors),
+        which matches the Colab notebook's descriptor set exactly.
+
+3.3  Alternative: pip Virtual Environment (NOT RECOMMENDED)
+────────────────────────────────────────────────────────────
+
+    ⚠️  This gives you RDKit 2022.09 (208 descriptors), which does NOT
+        match the Colab notebook. Use conda (section 3.2) instead.
+
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
     pip install "numpy<2"
 
 3.4  Create Required Directories
@@ -246,27 +270,26 @@
         The default admin is created as admin/admin123 on first launch.
 
 3.6  Start the Server
-───────────────────────
+──────────────────────
 
-    # Easiest — launcher uses the venv automatically:
+    # Easiest — launcher detects conda env automatically:
     ./run.sh
 
-    # Development (single user) — use the venv:
-    source venv/bin/activate
+    # The launcher prefers conda env (~/miniforge3/envs/botanicaltox/)
+    # over the pip venv. It prints the RDKit version on startup.
+
+    # Development (single user):
+    conda activate botanicaltox
     python3 app.py
 
     # Or directly:
-    venv/bin/python app.py
+    ~/miniforge3/envs/botanicaltox/bin/python app.py
 
     # Production (multi-user):
+    conda activate botanicaltox
     gunicorn -w 4 -b 0.0.0.0:5001 app:app
 
     # Open: http://localhost:5001
-
-    ⚠️  New auth dependencies (flask-login, python-dotenv) must be installed.
-        If you get "ModuleNotFoundError: No module named 'flask_login'",
-        activate the venv (source venv/bin/activate) before running, or run
-        ./run.sh which picks the venv automatically.
 
 3.7  Verify Installation
 ──────────────────────────
@@ -296,15 +319,10 @@
 4. CONFIGURATION REFERENCE
 ═══════════════════════════════════════════════════════════════════════════════
 
-4.1  Environment Variables
-────────────────────────────
+4.1  Environment Variables (.env)
+────────────────────────────────────
 
     Set these in .env or as system environment variables:
-
-    │ Variable       │ Default                          │ Purpose         │
-    │────────────────│──────────────────────────────────│─────────────────│
-4.1  Environment Variables (.env)
-─────────────────────────────────────
 
     │ Variable        │ Default                          │ Purpose           │
     │─────────────────│──────────────────────────────────│───────────────────│
@@ -342,11 +360,12 @@
 5. GITHUB REPOSITORY STRUCTURE
 ═══════════════════════════════════════════════════════════════════════════════
 
-    drug_ai/
+    botanicaltox/
     ├── .gitignore
     ├── .env.example
     ├── requirements.txt
     ├── app.py                       ← Main entry point
+    ├── run.sh                       ← Auto-detects conda/pip env
     ├── ai_explainer.py
     ├── extract_features.py
     ├── train_common.py
@@ -391,12 +410,14 @@
 
     [ ] Push code to GitHub (files in Section 1.1 only)
     [ ] On new machine: git clone <repo-url>
-    [ ] python3 -m venv venv && source venv/bin/activate
+    [ ] Install Miniforge: bash Miniforge3-Linux-x86_64.sh -b -p $HOME/miniforge3
+    [ ] source $HOME/miniforge3/bin/activate
+    [ ] conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge -y
+    [ ] conda activate botanicaltox
     [ ] pip install -r requirements.txt
-    [ ] pip install "numpy<2"
-    [ ] mkdir -p models uploads sessions
+    [ ] mkdir -p models uploads sessions outputs/datasets
     [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
-    [ ] python3 app.py
+    [ ] ./run.sh  (or: gunicorn -w 4 -b 0.0.0.0:5001 app:app)
     [ ] Open http://localhost:5001 → login with admin / admin123
     [ ] Change the admin password after first login
     [ ] Upload datasets/medchem_training.csv → Train → Predict
