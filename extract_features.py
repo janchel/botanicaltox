@@ -14,6 +14,7 @@ Usage:
 
 import argparse
 import os
+import signal
 import sys
 import warnings
 from pathlib import Path
@@ -31,6 +32,32 @@ from rdkit.Chem import Descriptors
 from rdkit.ML.Descriptors import MoleculeDescriptors
 
 warnings.filterwarnings("ignore")
+
+
+class _SIGFPEError(Exception):
+    """Raised when a SIGFPE signal is caught (floating-point exception)."""
+    pass
+
+
+def _sigfpe_handler(signum, frame):
+    raise _SIGFPEError("SIGFPE: floating-point exception")
+
+
+def _safe_balaban_j(mol):
+    """Compute BalabanJ with SIGFPE protection.
+
+    BalabanJ calls CharacteristicPolynomial → numpy.dot which can raise
+    SIGFPE (a C-level signal, not a Python exception) on certain molecule
+    topologies.  We install a temporary SIGFPE handler, try the call, and
+    return NaN on failure so the molecule isn't lost entirely.
+    """
+    old_handler = signal.signal(signal.SIGFPE, _sigfpe_handler)
+    try:
+        return Descriptors.BalabanJ(mol)
+    except (_SIGFPEError, Exception):
+        return np.nan
+    finally:
+        signal.signal(signal.SIGFPE, old_handler)
 
 
 def parse_smiles_column(df: pd.DataFrame) -> str:
@@ -94,7 +121,6 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
         raise and leaving a NaN for that cell (later imputed/cleaned).
     """
     _EXCLUDE_DESCRIPTORS = {
-        "BalabanJ",  # calls CharacteristicPolynomial → numpy.dot can SIGFPE
         "Ipc",       # calls CharacteristicPolynomial → same crash
         "AvgIpc",    # calls Ipc → same crash
     }
@@ -105,16 +131,27 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
     calculator = MoleculeDescriptors.MolecularDescriptorCalculator(descriptor_names)
 
     def _safe_row(mol):
+        # Wrap batch computation with SIGFPE guard — BalabanJ in the
+        # calculator can trigger a C-level floating-point exception that
+        # Python's except won't catch.
+        old_handler = signal.signal(signal.SIGFPE, _sigfpe_handler)
         try:
-            return list(calculator.CalcDescriptors(mol))
-        except Exception:
+            row = list(calculator.CalcDescriptors(mol))
+            signal.signal(signal.SIGFPE, old_handler)
+            return row
+        except (_SIGFPEError, Exception):
+            signal.signal(signal.SIGFPE, old_handler)
             pass
         # Fallback: one descriptor at a time so a single failure can't
         # wipe out the whole molecule's features.
         row = []
         for name in descriptor_names:
             try:
-                row.append(descriptor_fns[name](mol))
+                # BalabanJ can SIGFPE — use protected wrapper
+                if name == "BalabanJ":
+                    row.append(_safe_balaban_j(mol))
+                else:
+                    row.append(descriptor_fns[name](mol))
             except Exception:
                 row.append(np.nan)
         return row

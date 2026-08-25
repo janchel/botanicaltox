@@ -896,7 +896,7 @@ def train():
             all_graphs[f"importance_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
             # Topological Indices
-            topo_indices = ["WienerIndex", "Zagreb_M1", "Zagreb_M2"]
+            topo_indices = ["WienerIndex", "Zagreb_M1", "Zagreb_M2", "BalabanJ"]
             topo_imps = {}
             for feat_name in topo_indices:
                 if feat_name in X.columns:
@@ -1503,12 +1503,25 @@ def ranking():
             flash("No trained models found for the selected name.", "error")
             return redirect(url_for("ranking"))
 
-        # Priority score (notebook-style): both active AND non-toxic to rank high
-        #   Safety  = 1 − Toxicity
-        #   Priority = Activity × Safety
+        # ── Scoring formula (student-selectable) ──────────────────────────────
+        formula = request.form.get("formula", "multiplicative").strip()
+        w1_raw = float(request.form.get("weight_activity", 50)) / 100.0
+        w2_raw = float(request.form.get("weight_safety", 50)) / 100.0
+        w_sum = w1_raw + w2_raw
+        w1 = w1_raw / w_sum if w_sum > 0 else 0.5
+        w2 = w2_raw / w_sum if w_sum > 0 else 0.5
+
         if "Activity_Score" in results.columns and "Toxicity_Score" in results.columns:
             results["Safety_Score"] = (1.0 - results["Toxicity_Score"]).round(4)
-            results["Priority_Score"] = (results["Activity_Score"] * results["Safety_Score"]).round(4)
+            if formula == "subtractive":
+                results["Priority_Score"] = (results["Activity_Score"] - results["Toxicity_Score"]).round(4)
+            elif formula == "safety_weighted":
+                tox_sq = (results["Toxicity_Score"] ** 2).clip(0, 1)
+                results["Priority_Score"] = (results["Activity_Score"] * (1.0 - tox_sq)).round(4)
+            elif formula == "weighted":
+                results["Priority_Score"] = (w1 * results["Activity_Score"] + w2 * results["Safety_Score"]).round(4)
+            else:  # multiplicative (default)
+                results["Priority_Score"] = (results["Activity_Score"] * results["Safety_Score"]).round(4)
             sort_col = "Priority_Score"
         elif "Activity_Score" in results.columns:
             results["Priority_Score"] = results["Activity_Score"].round(4)
@@ -1517,6 +1530,15 @@ def ranking():
             results["Safety_Score"] = (1.0 - results["Toxicity_Score"]).round(4)
             results["Priority_Score"] = results["Safety_Score"].round(4)
             sort_col = "Priority_Score"
+
+        # Formula label for results display
+        formula_labels = {
+            "multiplicative": "A × (1 − T)",
+            "subtractive":    "A − T",
+            "safety_weighted":"A × (1 − T²)",
+            "weighted":       f"{w1:.2f} × A + {w2:.2f} × S",
+        }
+        formula_display = formula_labels.get(formula, formula_labels["multiplicative"])
 
         # Sort by priority score
         results = results.sort_values(sort_col, ascending=False).reset_index(drop=True)
@@ -1563,6 +1585,8 @@ def ranking():
             result_filename=result_path.name,
             session_id=session.get("session_id"),
             deduplicated=deduplicate,
+            formula_display=formula_display,
+            formula_name=formula,
         )
 
     except Exception as e:
