@@ -1,7 +1,7 @@
 """
 app.py — Flask Web Application
 ===============================
-Web interface for the BotanicalTox ML pipeline.
+Web interface for the CRABLOX ML pipeline.
 Research focus: Predicting plant compound activity against OXA-23 
 β-lactamase (antibiotic resistance enzyme) and toxicity to humans.
 
@@ -84,7 +84,7 @@ from database import init_db, close_db, create_default_admin, User
 # ── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__, instance_relative_config=True)
-app.secret_key = os.environ.get("SECRET_KEY", "botanicaltox-2026-secret-key-change-in-production")
+app.secret_key = os.environ.get("SECRET_KEY", "crablox-2026-secret-key-change-in-production")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB max upload
 app.config["UPLOAD_FOLDER"] = Path(__file__).resolve().parent / "uploads"
 app.config["MODEL_FOLDER"] = Path(__file__).resolve().parent / "models"
@@ -1715,7 +1715,7 @@ def download(session_id, filename):
 
 if __name__ == "__main__":
     print("\n" + "=" * 55)
-    print("  🌿  BotanicalTox — Web Interface")
+    print("  🧬  CRABLOX — Web Interface")
     print("  Open:  http://localhost:5001")
     print("=" * 55 + "\n")
     app.run(host="0.0.0.0", port=5001, debug=True)

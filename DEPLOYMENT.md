@@ -1,6 +1,6 @@
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║     BotanicalTox — DEPLOYMENT GUIDE                                              ║
+║     CRABLOX — DEPLOYMENT GUIDE                                              ║
 ║     GitHub Push & Fresh Machine Setup                                        ║
 ║     August 2026                                                              ║
 ║                                                                              ║
@@ -184,7 +184,7 @@
         and does NOT match the Colab notebook's descriptor set.
 
         USE CONDA/MINIFORGE (not pip) for RDKit:
-            conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge
+            conda create -n crablox python=3.10 rdkit=2026.03 -c conda-forge
 
         If you use pip's rdkit-pypi, you get 208 descriptors and your
         ranking results will NOT match the notebook (Spearman ~0.86).
@@ -218,9 +218,9 @@
     bash Miniforge3-Linux-x86_64.sh -b -p $HOME/miniforge3
     source $HOME/miniforge3/bin/activate
 
-    # Create the botanicaltox environment with RDKit 2026+
-    conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge -y
-    conda activate botanicaltox
+    # Create the crablox environment with RDKit 2026+
+    conda create -n crablox python=3.10 rdkit=2026.03 -c conda-forge -y
+    conda activate crablox
 
     # Install remaining dependencies via pip
     pip install -r requirements.txt
@@ -275,18 +275,18 @@
     # Easiest — launcher detects conda env automatically:
     ./run.sh
 
-    # The launcher prefers conda env (~/miniforge3/envs/botanicaltox/)
+    # The launcher prefers conda env (~/miniforge3/envs/crablox/)
     # over the pip venv. It prints the RDKit version on startup.
 
     # Development (single user):
-    conda activate botanicaltox
+    conda activate crablox
     python3 app.py
 
     # Or directly:
-    ~/miniforge3/envs/botanicaltox/bin/python app.py
+    ~/miniforge3/envs/crablox/bin/python app.py
 
     # Production (multi-user):
-    conda activate botanicaltox
+    conda activate crablox
     gunicorn -w 4 -b 0.0.0.0:5001 app:app
 
     # Open: http://localhost:5001
@@ -295,7 +295,7 @@
 ──────────────────────────
 
     curl http://localhost:5001/
-    # Should return the public BotanicalTox homepage HTML
+    # Should return the public CRABLOX homepage HTML
 
     curl http://localhost:5001/train
     # Should redirect (302) to /login?next=%2Ftrain for guests
@@ -412,8 +412,8 @@
     [ ] On new machine: git clone <repo-url>
     [ ] Install Miniforge: bash Miniforge3-Linux-x86_64.sh -b -p $HOME/miniforge3
     [ ] source $HOME/miniforge3/bin/activate
-    [ ] conda create -n botanicaltox python=3.10 rdkit=2026.03 -c conda-forge -y
-    [ ] conda activate botanicaltox
+    [ ] conda create -n crablox python=3.10 rdkit=2026.03 -c conda-forge -y
+    [ ] conda activate crablox
     [ ] pip install -r requirements.txt
     [ ] mkdir -p models uploads sessions outputs/datasets
     [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
