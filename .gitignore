@@ -41,6 +41,8 @@ flavonoid_screening_results_ranked.csv
 models/*.pkl
 !models/activity_legacy.pkl
 !models/toxicity_legacy.pkl
+!models/activity_aug26.pkl
+!models/toxicity_aug26.pkl
 models/owners.json
 
 # OS files
