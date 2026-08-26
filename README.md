@@ -14,7 +14,7 @@ Built by **The Science and Technology Education Center (STEC) — Batch of 2027*
 - **Export test results** — after training, download the held-out **test-set predictions** and a one-row **metrics summary** as CSV (mirrors the students' Colab notebook 1.6a/2.6a).
 - **Predict compounds** — upload SMILES and get instant activity & toxicity predictions (downloadable as CSV).
 - **Plant search** — enter a plant name; the app looks up its known compounds (PubChem) and predicts their properties.
-- **Rank compounds** — sort candidates by 4 selectable priority formulas: Multiplicative (Activity × Safety), Subtractive, Safety-Weighted, or Weighted (custom importance).
+- **Rank compounds** — sort candidates by 4 selectable priority formulas: Multiplicative (Activity × Safety), Subtractive, Safety-Weighted, or Weighted (custom importance). The **default Multiplicative** formula matches the reference notebook exactly, and the ranking export reproduces the notebook's `flavonoid_top15_shortlist` column format.
 - **Team page** — public page showcasing student members with profiles and pictures.
 - **User accounts** — login/registration with **admin approval**, and admin **promote/demote** of other admins.
 - **Model ownership** — only the owner (or an admin) can delete a trained model.
@@ -108,7 +108,7 @@ These are the actual datasets used by the STEC research notebook (`CRABLOX_Colab
 | `_ACTIVITY__105_COMPOUNDS_FINAL_TRAINING.csv` | 105 compounds (30 active / 75 inactive) against OXA-family β-lactamases |
 | `prediction_compounds.xlsx` | 289-row flavonoid screening library (`Compound_ID, Smiles`) |
 
-After training on these, run a prediction on `prediction_compounds.xlsx` and view the **Rank** page for the `Priority = Activity × Safety` shortlist.
+After training on these, run a prediction on `prediction_compounds.xlsx` and open the **Rank** page. With both models trained, download `ranking_top15.csv` for the notebook-compatible top-15 shortlist (or `ranking.csv` for the full ranked library).
 
 ---
 
@@ -155,6 +155,28 @@ The reference pipeline lives in `CRABLOX_Colab_Complete_Pipeline.ipynb` — a Co
 After these changes, training on the notebook's own data (`datasets/_ACTIVITY__105_COMPOUNDS_FINAL_TRAINING.csv` and `datasets/toxicity_compounds.csv`) produces ranked results with **Spearman rank correlation ≈ 0.90** against the notebook's output. The remaining ~10% gap comes from non-determinism in the cross-validation splits (GroupShuffleSplit has inherent randomness).
 
 Top compound in both: `445881` — confirmed matching.
+
+### Ranking output matches the notebook shortlist
+
+With both an activity and a toxicity model trained, the **Rank** page produces two downloadable CSVs that mirror the notebook's shortlist format (`flavonoid_top15_shortlist (2).csv`):
+
+- `ranking.csv` — full ranked library (all compounds)
+- `ranking_top15.csv` — top 15 by priority score (notebook shortlist format)
+
+Both use the notebook's exact column order:
+
+`Rank, Compound_ID, Smiles, Wiener, Zagreb1, Zagreb2, Balaban_RDKit, activity_score, Activity_Predicted_Label, toxicity_score, Toxicity_Predicted_Label, safety_score, priority_score`
+
+The four selectable ranking formulas:
+
+| Formula | Computation | In notebook? |
+|---------|-------------|--------------|
+| **Multiplicative** (default) | `Activity × (1 − Toxicity)` | ✅ Yes — the notebook's formula |
+| Subtractive | `Activity − Toxicity` | ❌ App-only |
+| Safety-Weighted | `Activity × (1 − Toxicity²)` | ❌ App-only |
+| Weighted | `w₁·Activity + w₂·Safety` | ❌ App-only |
+
+The **Multiplicative** option is identical to the notebook (`priority_score = activity_score × (1 − toxicity_score)`), so selecting it (the default) reproduces the notebook's ranking logic. Scores are exported at full precision (the notebook does not round), and `Source_File` is appended as a trailing column for multi-file uploads.
 
 ---
 
