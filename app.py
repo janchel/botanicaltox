@@ -58,6 +58,7 @@ from flask_login import (
 # ── Import our ML modules ───────────────────────────────────────────────────
 from rdkit import Chem
 from rdkit.Chem import Draw
+from rdkit.Chem import Descriptors
 from extract_features import (
     parse_smiles_column,
     create_molecules,
@@ -1465,8 +1466,19 @@ def ranking():
 
         desc_df = compute_all_rdkit_descriptors(mol_list)
         topo_df = compute_topological_indices(mol_list)
+        # Rename to notebook output naming + add Balaban_RDKit (computed on the
+        # raw SMILES without explicit Hs, exactly like the Colab notebook).
+        topo_df = topo_df.rename(columns={
+            "WienerIndex": "Wiener",
+            "Zagreb_M1": "Zagreb1",
+            "Zagreb_M2": "Zagreb2",
+        })
+        topo_df["Balaban_RDKit"] = [
+            (Descriptors.BalabanJ(Chem.MolFromSmiles(str(s))) if Chem.MolFromSmiles(str(s)) else np.nan)
+            for s in df[smiles_col]
+        ]
         X = pd.concat([desc_df, topo_df], axis=1)
-        results = df.copy()
+        results = pd.concat([df.copy(), topo_df.reset_index(drop=True)], axis=1)
 
         selected_model = request.form.get("model_name", "default").strip() or "default"
         tasks_found = []
@@ -1480,7 +1492,9 @@ def ranking():
             Xa = align_features_for_model(X, act_model)
             results["Activity_Prediction"] = act_model.predict(Xa)
             try:
-                results["Activity_Score"] = act_model.predict_proba(Xa)[:, 1].round(4)
+                act_proba = act_model.predict_proba(Xa)[:, 1]
+                results["activity_score"] = act_proba              # full precision (notebook-style)
+                results["Activity_Score"] = act_proba.round(4)    # rounded (UI/display)
             except Exception:
                 pass
             tasks_found.append("activity")
@@ -1494,7 +1508,9 @@ def ranking():
             Xt = align_features_for_model(X, tox_model)
             results["Toxicity_Prediction"] = tox_model.predict(Xt)
             try:
-                results["Toxicity_Score"] = tox_model.predict_proba(Xt)[:, 1].round(4)
+                tox_proba = tox_model.predict_proba(Xt)[:, 1]
+                results["toxicity_score"] = tox_proba              # full precision (notebook-style)
+                results["Toxicity_Score"] = tox_proba.round(4)    # rounded (UI/display)
             except Exception:
                 pass
             tasks_found.append("toxicity")
@@ -1512,22 +1528,27 @@ def ranking():
         w2 = w2_raw / w_sum if w_sum > 0 else 0.5
 
         if "Activity_Score" in results.columns and "Toxicity_Score" in results.columns:
-            results["Safety_Score"] = (1.0 - results["Toxicity_Score"]).round(4)
+            results["safety_score"] = 1.0 - results["toxicity_score"]               # full precision
+            results["Safety_Score"] = results["safety_score"].round(4)            # rounded (UI)
             if formula == "subtractive":
-                results["Priority_Score"] = (results["Activity_Score"] - results["Toxicity_Score"]).round(4)
+                results["priority_score"] = results["activity_score"] - results["toxicity_score"]
             elif formula == "safety_weighted":
-                tox_sq = (results["Toxicity_Score"] ** 2).clip(0, 1)
-                results["Priority_Score"] = (results["Activity_Score"] * (1.0 - tox_sq)).round(4)
+                tox_sq = (results["toxicity_score"] ** 2).clip(0, 1)
+                results["priority_score"] = results["activity_score"] * (1.0 - tox_sq)
             elif formula == "weighted":
-                results["Priority_Score"] = (w1 * results["Activity_Score"] + w2 * results["Safety_Score"]).round(4)
-            else:  # multiplicative (default)
-                results["Priority_Score"] = (results["Activity_Score"] * results["Safety_Score"]).round(4)
+                results["priority_score"] = w1 * results["activity_score"] + w2 * results["safety_score"]
+            else:  # multiplicative (default — matches notebook)
+                results["priority_score"] = results["activity_score"] * results["safety_score"]
+            results["Priority_Score"] = results["priority_score"].round(4)
             sort_col = "Priority_Score"
         elif "Activity_Score" in results.columns:
+            results["priority_score"] = results["activity_score"]
             results["Priority_Score"] = results["Activity_Score"].round(4)
             sort_col = "Priority_Score"
         else:
-            results["Safety_Score"] = (1.0 - results["Toxicity_Score"]).round(4)
+            results["safety_score"] = 1.0 - results["toxicity_score"]
+            results["Safety_Score"] = results["safety_score"].round(4)
+            results["priority_score"] = results["safety_score"]
             results["Priority_Score"] = results["Safety_Score"].round(4)
             sort_col = "Priority_Score"
 
@@ -1543,9 +1564,28 @@ def ranking():
         # Sort by priority score
         results = results.sort_values(sort_col, ascending=False).reset_index(drop=True)
 
-        # Save FULL results to CSV (before taking top 15)
+        # Add Rank column + notebook-style binary predicted labels
+        results.insert(0, "Rank", range(1, len(results) + 1))
+        if "Activity_Score" in results.columns:
+            results["Activity_Predicted_Label"] = (results["Activity_Score"] >= 0.5).astype(int)
+        if "Toxicity_Score" in results.columns:
+            results["Toxicity_Predicted_Label"] = (results["Toxicity_Score"] >= 0.5).astype(int)
+
+        # Save results in notebook-style column order (flavonoid_top15_shortlist format)
+        export_cols = [
+            "Rank", "Compound_ID", smiles_col,
+            "Wiener", "Zagreb1", "Zagreb2", "Balaban_RDKit",
+            "activity_score", "Activity_Predicted_Label",
+            "toxicity_score", "Toxicity_Predicted_Label",
+            "safety_score", "priority_score",
+        ]
+        export_cols = [c for c in export_cols if c in results.columns]
+        if "Source_File" in results.columns:
+            export_cols.append("Source_File")
         result_path = sess_dir / "ranking.csv"
-        results.to_csv(result_path, index=False)
+        results[export_cols].to_csv(result_path, index=False)
+        top15_path = sess_dir / "ranking_top15.csv"
+        results.head(15)[export_cols].to_csv(top15_path, index=False)
 
         # Take top 15 for display
         results_display = results.head(15).reset_index(drop=True)
@@ -1568,9 +1608,11 @@ def ranking():
                 cid = str(results_display.iloc[i].get("Compound_ID", f"#{i+1}"))
                 mol_images.append({"id": cid, "image": img_b64})
 
-        preview_cols = ["Compound_ID", smiles_col, "Chemical_Class", "Source_File"]
-        for c in ["Activity_Prediction", "Activity_Score", "Toxicity_Prediction", "Toxicity_Score",
-                  "Safety_Score", "Priority_Score"]:
+        preview_cols = ["Rank", "Compound_ID", smiles_col, "Chemical_Class", "Source_File"]
+        for c in ["Wiener", "Zagreb1", "Zagreb2", "Balaban_RDKit",
+                  "Activity_Prediction", "Activity_Score", "Activity_Predicted_Label",
+                  "Toxicity_Prediction", "Toxicity_Score", "Toxicity_Predicted_Label",
+                  "Safety_Score", "safety_score", "Priority_Score", "priority_score"]:
             if c in results_display.columns:
                 preview_cols.append(c)
         preview = results_display[preview_cols].to_dict(orient="records")
