@@ -134,7 +134,7 @@ The reference pipeline lives in `CRABLOX_Colab_Complete_Pipeline.ipynb` — a Co
 | Step | Notebook code | What it does |
 |------|--------------|--------------|
 | 1 | `CalcDescriptors(mols, desc_list)` | Computes 217 molecular descriptors via RDKit 2026.03 |
-| 2 | `wiener_index(mol)`, `zagreb_indices(mol)`, `BalabanJ` | Adds 4 topological indices (Wiener, Zagreb M1/M2, BalabanJ) → 221 features total |
+| 2 | `wiener_index(mol)`, `zagreb_indices(mol)`, `BalabanJ` | Adds 4 topological indices (**Wiener, Zagreb1, Zagreb2, Balaban_RDKit**) → 221 features total. These column names match the ranking-output columns exactly |
 | 3 | `StratifiedGroupKFold` / `GroupShuffleSplit` | Scaffold-aware train/test split — compounds with the same scaffold never leak across splits |
 | 4 | `GridSearchCV(..., scoring= MCC)` | Hyperparameter search optimizing Matthews Correlation Coefficient (not accuracy or AUC) |
 | 5 | `isotonic_regression` (toxicity) / `sigmoid` (activity) | Calibrates prediction probabilities so scores are comparable across models |
@@ -144,11 +144,12 @@ The reference pipeline lives in `CRABLOX_Colab_Complete_Pipeline.ipynb` — a Co
 
 | App file | Change | Why |
 |----------|--------|-----|
-| `extract_features.py` | Re-enabled BalabanJ, added Ipc/AvgIpc with SIGFPE protection, added `_largest_fragment()` for Wiener/Zagreb | Notebook uses all 217+4 descriptors; old app excluded BalabanJ and used whole-molecule topological indices |
+| `extract_features.py` | `compute_topological_indices()` now returns the 4 notebook-aligned columns **Wiener, Zagreb1, Zagreb2, Balaban_RDKit** (added `balaban_index()` with SIGFPE protection, reused `_largest_fragment()`); added Ipc/AvgIpc SIGFPE protection | The training pipeline now actually includes Balaban (it previously only listed "BalabanJ" but never computed it), and the topo column names match the ranking route exactly so trained models align with ranking input |
 | `train_common.py` | Switched from `RandomizedSearchCV(ROC-AUC)` to `GridSearchCV(MCC)`, added task-specific param grids, task-specific calibration (sigmoid=activity, isotonic=toxicity) | Notebook uses MCC scoring and different calibration per task |
 | `train_common.py` | `load_features_and_labels()` now returns 4-tuple `(X, y, descriptor_cols, impute_medians)` with median imputation + drop cols >5% NaN | Matches notebook's preprocessing: impute with training medians, drop unstable descriptors |
 | `run.sh` | Prefers conda env `~/miniforge3/envs/crablox/` over pip venv | RDKit 2026.03 (217 descriptors) is only available via conda-forge, not pip |
 | `app.py` | Training routes unpack 4-tuple, pass `task=` to `train_random_forest()` | Wires up the new calibration and param grid logic per task |
+| `app.py` | Train route validates labels **before** training: requires binary `{0,1}` with **both** classes present (single-class is rejected with an explanation), warns on missing/blank labels and severe class imbalance | Prevents silently training broken models that later crash ranking (e.g. the "Toxicity score" error from a single-class model) |
 
 ### Verification
 
