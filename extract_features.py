@@ -217,24 +217,42 @@ def zagreb_indices(mol) -> tuple:
     return m1, m2
 
 
+def balaban_index(mol) -> float:
+    """Balaban J index, computed on the largest connected fragment.
+
+    Uses the same largest-fragment handling as Wiener/Zagreb (so salts and
+    multi-component SMILES behave consistently) and is SIGFPE-safe.
+    """
+    frag = _largest_fragment(mol)
+    return _safe_balaban_j(frag)
+
+
 def compute_topological_indices(mol_list: list) -> pd.DataFrame:
-    """Compute Wiener, Zagreb M1, and Zagreb M2 indices."""
-    wiener_vals, m1_vals, m2_vals = [], [], []
+    """Compute Wiener, Zagreb M1/M2, and Balaban J indices.
+
+    Column names (Wiener, Zagreb1, Zagreb2, Balaban_RDKit) match the notebook
+    shortlist output and the app's ranking route, so models trained here align
+    exactly with the features computed at prediction/ranking time.
+    """
+    wiener_vals, m1_vals, m2_vals, balaban_vals = [], [], [], []
     for mol in mol_list:
         if mol is None:
             wiener_vals.append(np.nan)
             m1_vals.append(np.nan)
             m2_vals.append(np.nan)
+            balaban_vals.append(np.nan)
         else:
             wiener_vals.append(wiener_index(mol))
             m1, m2 = zagreb_indices(mol)
             m1_vals.append(m1)
             m2_vals.append(m2)
+            balaban_vals.append(balaban_index(mol))
 
     result = pd.DataFrame({
-        "WienerIndex": wiener_vals,
-        "Zagreb_M1": m1_vals,
-        "Zagreb_M2": m2_vals,
+        "Wiener": wiener_vals,
+        "Zagreb1": m1_vals,
+        "Zagreb2": m2_vals,
+        "Balaban_RDKit": balaban_vals,
     })
     # Clean inf/NaN values
     result = result.replace([np.inf, -np.inf], np.nan).fillna(0)

@@ -802,6 +802,65 @@ def train():
             label_col_name = request.form.get("label_col", "").strip() or "Toxicity_Label"
             tasks_to_train.append(("toxicity", label_col_name, task_name))
 
+        # ── Pre-training data validation (notify problems BEFORE training) ──
+        # Catches the failure modes that silently produce broken models (e.g. a
+        # single-class label, which later crashes ranking with "Toxicity score").
+        valid_tasks = []
+        for task_key, label_col, display_name in tasks_to_train:
+            if label_col not in df.columns:
+                flash(f"⚠️ Skipped '{display_name}': missing label column '{label_col}'.", "error")
+                continue
+            y_raw = df[label_col]
+            n_missing = int(y_raw.isna().sum())
+            if n_missing:
+                flash(
+                    f"⚠️ '{display_name}': {n_missing} row(s) have a missing/blank label "
+                    "and will be dropped before training.", "error"
+                )
+            y_clean = y_raw.dropna()
+            try:
+                y_vals = y_clean.astype(int)
+            except (ValueError, TypeError):
+                flash(
+                    f"⚠️ Skipped '{display_name}': labels must be binary integers (0/1); "
+                    f"found non-numeric values.", "error"
+                )
+                continue
+            classes = sorted(y_vals.unique().tolist())
+            if classes != [0, 1]:
+                flash(
+                    f"⚠️ Skipped '{display_name}': expected binary labels {{0,1}} but found {classes}. "
+                    "Convert labels to 0/1 and retry.", "error"
+                )
+                continue
+            n_pos = int((y_vals == 1).sum())
+            n_neg = int((y_vals == 0).sum())
+            n_total = n_pos + n_neg
+            if n_pos == 0 or n_neg == 0:
+                flash(
+                    f"⚠️ Skipped '{display_name}': only one class present ({classes}) — a classifier "
+                    "needs both classes. This is what caused the earlier 'Toxicity score' crash at ranking.",
+                    "error",
+                )
+                continue
+            minority = min(n_pos, n_neg)
+            if minority < 5:
+                flash(
+                    f"⚠️ '{display_name}': severe class imbalance (minority class = {minority} of "
+                    f"{n_total}). The resulting model will be unreliable.", "error"
+                )
+            elif minority < 10:
+                flash(
+                    f"ℹ️ '{display_name}': small minority class ({minority} of {n_total}) — "
+                    "consider collecting more data for this class.", "info"
+                )
+            valid_tasks.append((task_key, label_col, display_name))
+
+        tasks_to_train = valid_tasks
+        if not tasks_to_train:
+            flash("No valid tasks to train after data validation. Fix the issues above and try again.", "error")
+            return redirect(url_for("train"))
+
         all_metrics = {}
         all_graphs = {}
         all_best_params = {}
@@ -897,7 +956,7 @@ def train():
             all_graphs[f"importance_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
             # Topological Indices
-            topo_indices = ["WienerIndex", "Zagreb_M1", "Zagreb_M2", "BalabanJ"]
+            topo_indices = ["Wiener", "Zagreb1", "Zagreb2", "Balaban_RDKit"]
             topo_imps = {}
             for feat_name in topo_indices:
                 if feat_name in X.columns:
@@ -1466,17 +1525,6 @@ def ranking():
 
         desc_df = compute_all_rdkit_descriptors(mol_list)
         topo_df = compute_topological_indices(mol_list)
-        # Rename to notebook output naming + add Balaban_RDKit (computed on the
-        # raw SMILES without explicit Hs, exactly like the Colab notebook).
-        topo_df = topo_df.rename(columns={
-            "WienerIndex": "Wiener",
-            "Zagreb_M1": "Zagreb1",
-            "Zagreb_M2": "Zagreb2",
-        })
-        topo_df["Balaban_RDKit"] = [
-            (Descriptors.BalabanJ(Chem.MolFromSmiles(str(s))) if Chem.MolFromSmiles(str(s)) else np.nan)
-            for s in df[smiles_col]
-        ]
         X = pd.concat([desc_df, topo_df], axis=1)
         results = pd.concat([df.copy(), topo_df.reset_index(drop=True)], axis=1)
 
@@ -1490,13 +1538,20 @@ def ranking():
         if act_path.exists():
             act_model = joblib.load(act_path)
             Xa = align_features_for_model(X, act_model)
-            results["Activity_Prediction"] = act_model.predict(Xa)
+            try:
+                results["Activity_Prediction"] = act_model.predict(Xa)
+            except Exception as e:
+                flash(f"Activity model prediction failed: {e}", "error")
+                return redirect(url_for("ranking"))
             try:
                 act_proba = act_model.predict_proba(Xa)[:, 1]
                 results["activity_score"] = act_proba              # full precision (notebook-style)
                 results["Activity_Score"] = act_proba.round(4)    # rounded (UI/display)
             except Exception:
-                pass
+                # predict_proba can fail for single-class models; degrade to the
+                # binary prediction so ranking still works instead of crashing.
+                results["activity_score"] = results["Activity_Prediction"].astype(float)
+                results["Activity_Score"] = results["activity_score"].round(4)
             tasks_found.append("activity")
 
         # Toxicity prediction
@@ -1506,13 +1561,20 @@ def ranking():
         if tox_path.exists():
             tox_model = joblib.load(tox_path)
             Xt = align_features_for_model(X, tox_model)
-            results["Toxicity_Prediction"] = tox_model.predict(Xt)
+            try:
+                results["Toxicity_Prediction"] = tox_model.predict(Xt)
+            except Exception as e:
+                flash(f"Toxicity model prediction failed: {e}", "error")
+                return redirect(url_for("ranking"))
             try:
                 tox_proba = tox_model.predict_proba(Xt)[:, 1]
                 results["toxicity_score"] = tox_proba              # full precision (notebook-style)
                 results["Toxicity_Score"] = tox_proba.round(4)    # rounded (UI/display)
             except Exception:
-                pass
+                # predict_proba can fail for single-class models; degrade to the
+                # binary prediction so ranking still works instead of crashing.
+                results["toxicity_score"] = results["Toxicity_Prediction"].astype(float)
+                results["Toxicity_Score"] = results["toxicity_score"].round(4)
             tasks_found.append("toxicity")
 
         if not tasks_found:
@@ -1527,7 +1589,10 @@ def ranking():
         w1 = w1_raw / w_sum if w_sum > 0 else 0.5
         w2 = w2_raw / w_sum if w_sum > 0 else 0.5
 
-        if "Activity_Score" in results.columns and "Toxicity_Score" in results.columns:
+        has_act = "activity_score" in results.columns
+        has_tox = "toxicity_score" in results.columns
+
+        if has_act and has_tox:
             results["safety_score"] = 1.0 - results["toxicity_score"]               # full precision
             results["Safety_Score"] = results["safety_score"].round(4)            # rounded (UI)
             if formula == "subtractive":
@@ -1541,16 +1606,23 @@ def ranking():
                 results["priority_score"] = results["activity_score"] * results["safety_score"]
             results["Priority_Score"] = results["priority_score"].round(4)
             sort_col = "Priority_Score"
-        elif "Activity_Score" in results.columns:
+        elif has_act:
             results["priority_score"] = results["activity_score"]
             results["Priority_Score"] = results["Activity_Score"].round(4)
             sort_col = "Priority_Score"
-        else:
+        elif has_tox:
             results["safety_score"] = 1.0 - results["toxicity_score"]
             results["Safety_Score"] = results["safety_score"].round(4)
             results["priority_score"] = results["safety_score"]
             results["Priority_Score"] = results["Safety_Score"].round(4)
             sort_col = "Priority_Score"
+        else:
+            flash(
+                "Could not compute activity/toxicity scores for the selected "
+                "model(s). Re-train the model and try again.",
+                "error",
+            )
+            return redirect(url_for("ranking"))
 
         # Formula label for results display
         formula_labels = {
