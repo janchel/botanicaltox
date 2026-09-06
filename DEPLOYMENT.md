@@ -328,7 +328,7 @@
     │─────────────────│──────────────────────────────────│───────────────────│
     │ SECRET_KEY      │ insecure built-in                │ Session signing   │
     │ ADMIN_USERNAME  │ admin                            │ First admin user  │
-    │ ADMIN_PASSWORD  │ admin123                         │ First admin pass  │
+    │ ADMIN_PASSWORD  │                                  │ First admin pass  │
     │ AI_API_KEY      │ (none)                           │ AI explainer      │
     │ AI_BASE_URL     │ https://ai.rebelstack.fun        │ AI endpoint       │
     │ AI_MODEL        │ jandel/free                      │ AI model name     │
