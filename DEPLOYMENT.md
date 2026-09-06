@@ -243,7 +243,7 @@
       # Optional: AI_API_KEY for AI explanations
 
     ⚠️  The app works without a .env file, but uses insecure defaults.
-        The default admin is created as admin/admin123 on first launch.
+        The default admin is created as admin on first launch.
 
 3.6  Start the Server
 ───────────────────────
@@ -281,7 +281,7 @@
 ───────────────────────────────────
 
     • Open http://localhost:5001/login
-    • Sign in with the default admin (admin / admin123) or the
+    • Sign in with the default admin (admin) or the
       ADMIN_USERNAME / ADMIN_PASSWORD from your .env file
     • ⚠️  Change the admin password after first login
 
@@ -310,7 +310,7 @@
     │─────────────────│──────────────────────────────────│───────────────────│
     │ SECRET_KEY      │ insecure built-in                │ Session signing   │
     │ ADMIN_USERNAME  │ admin                            │ First admin user  │
-    │ ADMIN_PASSWORD  │ admin123                         │ First admin pass  │
+    │ ADMIN_PASSWORD  │                                  │ First admin pass  │
     │ AI_API_KEY      │ (none)                           │ AI explainer      │
     │ AI_BASE_URL     │ https://ai.rebelstack.fun        │ AI endpoint       │
     │ AI_MODEL        │ jandel/free                      │ AI model name     │
@@ -397,7 +397,7 @@
     [ ] mkdir -p models uploads sessions
     [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
     [ ] python3 app.py
-    [ ] Open http://localhost:5001 → login with admin / admin123
+    [ ] Open http://localhost:5001 → login with admin
     [ ] Change the admin password after first login
     [ ] Upload datasets/medchem_training.csv → Train → Predict
 
