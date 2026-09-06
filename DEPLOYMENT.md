@@ -267,7 +267,7 @@
       # Optional: AI_API_KEY for AI explanations
 
     ⚠️  The app works without a .env file, but uses insecure defaults.
-        The default admin is created as admin/admin123 on first launch.
+        The default admin is created as admin on first launch.
 
 3.6  Start the Server
 ──────────────────────
@@ -304,7 +304,7 @@
 ───────────────────────────────────
 
     • Open http://localhost:5001/login
-    • Sign in with the default admin (admin / admin123) or the
+    • Sign in with the default admin (admin) or the
       ADMIN_USERNAME / ADMIN_PASSWORD from your .env file
     • ⚠️  Change the admin password after first login
 
@@ -418,7 +418,7 @@
     [ ] mkdir -p models uploads sessions outputs/datasets
     [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
     [ ] ./run.sh  (or: gunicorn -w 4 -b 0.0.0.0:5001 app:app)
-    [ ] Open http://localhost:5001 → login with admin / admin123
+    [ ] Open http://localhost:5001 → login with admin 
     [ ] Change the admin password after first login
     [ ] Upload datasets/medchem_training.csv → Train → Predict
 
