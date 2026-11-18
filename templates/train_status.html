@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Training… — CRABLOX{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center mt-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-cpu"></i> Training in Progress
+            </div>
+            <div class="card-body p-4 text-center" id="statusBox">
+                <div class="spinner-border text-primary mb-3" role="status" id="spinner">
+                    <span class="visually-hidden">Loading…</span>
+                </div>
+                <h5 id="stageText">Starting…</h5>
+                <p class="text-muted" id="hintText">
+                    Training runs in the background so it won't time out. This page
+                    updates automatically — you can leave it open.
+                </p>
+
+                <div class="progress mt-3" style="height: 6px; display:none;" id="progressBar">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                         style="width: 100%"></div>
+                </div>
+
+                <div class="text-start mt-4" id="logBox" style="max-height:280px; overflow-y:auto;"></div>
+
+                <div class="mt-4" id="actionBox" style="display:none;">
+                    <a href="{{ url_for('train_result', job_id=job_id) }}" class="btn btn-success btn-lg">
+                        <i class="bi bi-graph-up"></i> View Results
+                    </a>
+                    <a href="{{ url_for('train') }}" class="btn btn-outline-secondary ms-2">Train Another</a>
+                </div>
+
+                <div class="mt-4" id="errorBox" style="display:none;">
+                    <div class="alert alert-danger" id="errorText"></div>
+                    <a href="{{ url_for('train') }}" class="btn btn-outline-secondary">Back to Training</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+const jobId = "{{ job_id }}";
+const spinner = document.getElementById('spinner');
+const stageText = document.getElementById('stageText');
+const logBox = document.getElementById('logBox');
+const actionBox = document.getElementById('actionBox');
+const errorBox = document.getElementById('errorBox');
+const errorText = document.getElementById('errorText');
+const progressBar = document.getElementById('progressBar');
+
+let lastCount = 0;
+function poll() {
+    fetch("{{ url_for('train_job_status', job_id=job_id) }}")
+        .then(r => r.json())
+        .then(job => {
+            if (job.stage) stageText.textContent = job.stage;
+
+            const msgs = job.messages || [];
+            if (msgs.length > lastCount) {
+                for (let i = lastCount; i < msgs.length; i++) {
+                    const m = msgs[i];
+                    const cls = m.level === 'error' ? 'text-danger'
+                              : m.level === 'info' ? 'text-info' : 'text-secondary';
+                    const icon = m.level === 'error' ? 'bi-exclamation-triangle'
+                               : m.level === 'info' ? 'bi-info-circle' : 'bi-check-circle';
+                    const div = document.createElement('div');
+                    div.className = cls + ' small mb-1';
+                    div.innerHTML = '<i class="bi ' + icon + ' me-1"></i>' + m.text;
+                    logBox.appendChild(div);
+                }
+                logBox.scrollTop = logBox.scrollHeight;
+                lastCount = msgs.length;
+            }
+
+            if (job.status === 'done') {
+                spinner.style.display = 'none';
+                progressBar.style.display = 'none';
+                actionBox.style.display = 'block';
+                stageText.textContent = '✅ Training complete!';
+            } else if (job.status === 'error') {
+                spinner.style.display = 'none';
+                progressBar.style.display = 'none';
+                errorBox.style.display = 'block';
+                const lastErr = msgs.filter(m => m.level === 'error').slice(-1)[0];
+                errorText.textContent = lastErr ? lastErr.text : 'Training failed. Check the log above.';
+                stageText.textContent = '❌ Training failed';
+            }
+        })
+        .catch(() => { /* ignore transient errors, keep polling */ });
+}
+
+poll();
+const timer = setInterval(() => {
+    const box = document.getElementById('actionBox');
+    const eb = document.getElementById('errorBox');
+    if (box.style.display === 'block' || eb.style.display === 'block') {
+        clearInterval(timer);
+    } else {
+        poll();
+    }
+}, 2000);
+</script>
+{% endblock %}

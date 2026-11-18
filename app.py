@@ -18,6 +18,7 @@ import io
 import os
 import json
 import uuid
+import threading
 import functools
 from pathlib import Path
 from datetime import datetime
@@ -172,6 +173,66 @@ def get_session_dir() -> Path:
     d = app.config["SESSION_FOLDER"] / sid
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+# ── Background training jobs ──────────────────────────────────────────────────
+# Training (especially with hyper-parameter tuning) can run far longer than the
+# gunicorn worker timeout. We offload it to a background thread and persist job
+# state to a JSON file inside the session folder so ANY worker can serve status
+# polls / results (gunicorn runs multiple workers, no shared memory).
+
+def _job_path(job_id: str, sess_dir: Path | None = None) -> Path:
+    if sess_dir is None:
+        sess_dir = get_session_dir()
+    return Path(sess_dir) / f"job_{job_id}.json"
+
+
+def _write_job(job_id: str, sess_dir: Path | None = None, **fields):
+    """Merge `fields` into the job JSON file (atomic-ish: write temp then rename)."""
+    import tempfile
+    p = _job_path(job_id, sess_dir)
+    data = {}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text())
+        except Exception:
+            data = {}
+    data.update(fields)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, default=_json_default))
+    tmp.replace(p)
+
+
+def _read_job(job_id: str, sess_dir: Path | None = None) -> dict:
+    p = _job_path(job_id, sess_dir)
+    if not p.exists():
+        return {"status": "missing"}
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return {"status": "missing"}
+
+
+def _json_default(o):
+    """Convert numpy / pandas / Path objects so job state is JSON-serializable."""
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return float(o)
+    if isinstance(o, (np.ndarray,)):
+        return o.tolist()
+    if isinstance(o, pd.Series):
+        return o.tolist()
+    if isinstance(o, pd.DataFrame):
+        return o.to_dict(orient="records")
+    if isinstance(o, Path):
+        return str(o)
+    return str(o)
+
+
+def _coerce_context(ctx: dict) -> dict:
+    """Recursively coerce numpy types in a render context to native Python."""
+    return json.loads(json.dumps(ctx, default=_json_default))
 
 
 def fig_to_b64(fig) -> str:
@@ -653,7 +714,8 @@ def index():
 def train():
     """
     GET:  Show the training upload form.
-    POST: Process the uploaded CSV, train models, and show results.
+    POST: Validate the upload quickly, then offload the (potentially long)
+          training to a background thread and redirect to a live status page.
     """
     if request.method == "GET":
         return render_template("train.html")
@@ -683,8 +745,79 @@ def train():
     upload_path = sess_dir / filename
     file.save(str(upload_path))
 
+    # ── Quick validation (fast, before we hand off to the background thread) ──
     try:
-        # 1. Extract features
+        df = pd.read_csv(upload_path) if upload_path.suffix == ".csv" else pd.read_excel(upload_path)
+    except Exception as e:
+        flash(f"Could not read file: {e}", "error")
+        return redirect(url_for("train"))
+
+    try:
+        smiles_col = parse_smiles_column(df)
+    except ValueError:
+        flash("No SMILES column found in the uploaded file.", "error")
+        return redirect(url_for("train"))
+
+    model_name = request.form.get("model_name", "default").strip().lower()
+    model_name = "".join(c for c in model_name if c.isalnum() or c in "_-") or "default"
+
+    act_label = request.form.get("label_col", "").strip() or "Activity_Label"
+    tox_label = request.form.get("label_col", "").strip() or "Toxicity_Label"
+
+    available_cols = set(df.columns)
+    missing_labels = []
+    if train_activity and act_label not in available_cols:
+        missing_labels.append(f"Activity_Label (needed for activity task)")
+    if train_toxicity and tox_label not in available_cols:
+        missing_labels.append(f"Toxicity_Label (needed for toxicity task)")
+    if missing_labels:
+        flash(
+            f"Missing label column(s): {', '.join(missing_labels)}. "
+            f"Available columns: {', '.join(sorted(available_cols))}",
+            "error",
+        )
+        return redirect(url_for("train"))
+
+    # ── Launch background job ──
+    job_id = uuid.uuid4().hex[:12]
+    _write_job(job_id, status="running", stage="Queued…", messages=[], result=None)
+    params = dict(
+        job_id=job_id,
+        sess_dir=str(sess_dir),
+        upload_path=str(upload_path),
+        filename=filename,
+        train_activity=train_activity,
+        train_toxicity=train_toxicity,
+        custom_task_name=custom_task_name,
+        tune=tune,
+        model_name=model_name,
+        act_label=act_label,
+        tox_label=tox_label,
+        username=current_user.username,
+    )
+    t = threading.Thread(target=run_training_job, kwargs=params, daemon=True)
+    t.start()
+    return redirect(url_for("train_status", job_id=job_id))
+
+
+def run_training_job(
+    job_id, sess_dir, upload_path, filename, train_activity, train_toxicity,
+    custom_task_name, tune, model_name, act_label, tox_label, username,
+):
+    """
+    Heavy training work, run in a background thread. Writes progress + the final
+    render context to the job JSON file so any gunicorn worker can serve it.
+    Mirrors the previous synchronous train() logic.
+    """
+    sess_dir = Path(sess_dir)
+    upload_path = Path(upload_path)
+    messages = []
+
+    def msg(text, level="info"):
+        messages.append({"level": level, "text": text})
+        _write_job(job_id, sess_dir=sess_dir, status="running", stage=text, messages=list(messages))
+
+    try:
         df = pd.read_csv(upload_path) if upload_path.suffix == ".csv" else pd.read_excel(upload_path)
         smiles_col = parse_smiles_column(df)
 
@@ -692,7 +825,6 @@ def train():
         dupes = df[smiles_col].duplicated()
         if dupes.any():
             dup_count = dupes.sum()
-            # Check for conflicting labels
             conflicts = 0
             activity_label_col = "Activity_Label" if "Activity_Label" in df.columns else None
             toxicity_label_col = "Toxicity_Label" if "Toxicity_Label" in df.columns else None
@@ -703,12 +835,11 @@ def train():
                 elif toxicity_label_col and rows[toxicity_label_col].nunique() > 1:
                     conflicts += 1
             if conflicts > 0:
-                flash(
+                msg(
                     f"⚠️ Found {dup_count} duplicate SMILES, {conflicts} with conflicting labels. "
                     "Conflicting duplicates were removed. Review your data.",
-                    "error"
+                    "error",
                 )
-                # Remove all copies of conflicting duplicates
                 conflict_smiles = set()
                 for smi in df.loc[dupes, smiles_col].unique():
                     rows = df[df[smiles_col] == smi]
@@ -718,25 +849,26 @@ def train():
                         conflict_smiles.add(smi)
                 df = df[~df[smiles_col].isin(conflict_smiles)]
             else:
-                flash(
+                msg(
                     f"ℹ️ Found {dup_count} duplicate SMILES with identical labels — kept first occurrence.",
-                    "info"
+                    "info",
                 )
-            # Deduplicate: keep first occurrence (structure-based)
             df, canon_dup_count = dedup_by_canonical_smiles(df, smiles_col)
             if canon_dup_count:
-                flash(
-                    f"ℹ️ Removed {canon_dup_count} additional structurally-identical duplicate(s) after label-conflict check.",
-                    "info"
+                msg(
+                    f"ℹ️ Removed {canon_dup_count} additional structurally-identical duplicate(s) "
+                    "after label-conflict check.",
+                    "info",
                 )
 
+        msg("Parsing molecules and computing RDKit descriptors…")
         mol_list = create_molecules(df[smiles_col])
         failed_count = sum(1 for m in mol_list if m is None)
         if failed_count:
-            flash(
+            msg(
                 f"⚠️ {failed_count} of {len(mol_list)} SMILES failed to parse and were dropped. "
                 "Check your CSV for invalid SMILES strings.",
-                "error"
+                "error",
             )
         valid_mask = [m is not None for m in mol_list]
         if not all(valid_mask):
@@ -746,98 +878,67 @@ def train():
         desc_df = compute_all_rdkit_descriptors(mol_list)
         topo_df = compute_topological_indices(mol_list)
 
-        # ── Robust cleaning (notebook-inspired): median imputation, keep
-        #    stable columns, and reuse these at prediction time ──
         feat_all = pd.concat([desc_df, topo_df], axis=1)
         feat_clean, descriptor_cols, impute_medians = clean_descriptor_matrix(
             feat_all, feat_all.columns
         )
 
-        # Combine — keep label columns in the saved file for load_features_and_labels
         meta_cols = {"Compound_ID", "Name", "Smiles", "mol"}
         keep_cols = [c for c in df.columns if c not in meta_cols]
-        feats = pd.concat(
-            [df[keep_cols].reset_index(drop=True), feat_clean], axis=1
-        )
+        feats = pd.concat([df[keep_cols].reset_index(drop=True), feat_clean], axis=1)
 
-        # Save features (includes label columns for load_features_and_labels)
         features_path = sess_dir / "features.csv"
         feats.to_csv(features_path, index=False)
 
-        # ── Scaffold groups for leakage-free splitting ──
         scaffold_groups = df[smiles_col].apply(scaffold_id).reset_index(drop=True)
         if scaffold_groups.isna().any():
-            scaffold_groups = None  # can't group reliably → fall back to random split
-
-        # 2. Train selected tasks
-        model_name = request.form.get("model_name", "default").strip().lower()
-        model_name = "".join(c for c in model_name if c.isalnum() or c in "_-") or "default"
-
-        # Validate label columns exist in the uploaded CSV before training
-        available_cols = set(df.columns)
-        missing_labels = []
-        if train_activity:
-            act_label = request.form.get("label_col", "").strip() or "Activity_Label"
-            if act_label not in available_cols:
-                missing_labels.append(f"Activity_Label (needed for activity task)")
-        if train_toxicity:
-            tox_label = request.form.get("label_col", "").strip() or "Toxicity_Label"
-            if tox_label not in available_cols:
-                missing_labels.append(f"Toxicity_Label (needed for toxicity task)")
-        if missing_labels:
-            flash(
-                f"Missing label column(s): {', '.join(missing_labels)}. "
-                f"Available columns: {', '.join(sorted(available_cols))}",
-                "error"
-            )
-            return redirect(url_for("train"))
+            scaffold_groups = None
 
         tasks_to_train = []
         if train_activity:
             task_name = custom_task_name if custom_task_name else "activity"
-            label_col_name = request.form.get("label_col", "").strip() or "Activity_Label"
-            tasks_to_train.append(("activity", label_col_name, task_name))
+            tasks_to_train.append(("activity", act_label, task_name))
         if train_toxicity:
             task_name = custom_task_name if custom_task_name else "toxicity"
-            label_col_name = request.form.get("label_col", "").strip() or "Toxicity_Label"
-            tasks_to_train.append(("toxicity", label_col_name, task_name))
+            tasks_to_train.append(("toxicity", tox_label, task_name))
 
-        # ── Pre-training data validation (notify problems BEFORE training) ──
-        # Catches the failure modes that silently produce broken models (e.g. a
-        # single-class label, which later crashes ranking with "Toxicity score").
+        # ── Pre-training data validation ──
         valid_tasks = []
         for task_key, label_col, display_name in tasks_to_train:
             if label_col not in df.columns:
-                flash(f"⚠️ Skipped '{display_name}': missing label column '{label_col}'.", "error")
+                msg(f"⚠️ Skipped '{display_name}': missing label column '{label_col}'.", "error")
                 continue
             y_raw = df[label_col]
             n_missing = int(y_raw.isna().sum())
             if n_missing:
-                flash(
+                msg(
                     f"⚠️ '{display_name}': {n_missing} row(s) have a missing/blank label "
-                    "and will be dropped before training.", "error"
+                    "and will be dropped before training.",
+                    "error",
                 )
             y_clean = y_raw.dropna()
             try:
                 y_vals = y_clean.astype(int)
             except (ValueError, TypeError):
-                flash(
+                msg(
                     f"⚠️ Skipped '{display_name}': labels must be binary integers (0/1); "
-                    f"found non-numeric values.", "error"
+                    f"found non-numeric values.",
+                    "error",
                 )
                 continue
             classes = sorted(y_vals.unique().tolist())
             if classes != [0, 1]:
-                flash(
+                msg(
                     f"⚠️ Skipped '{display_name}': expected binary labels {{0,1}} but found {classes}. "
-                    "Convert labels to 0/1 and retry.", "error"
+                    "Convert labels to 0/1 and retry.",
+                    "error",
                 )
                 continue
             n_pos = int((y_vals == 1).sum())
             n_neg = int((y_vals == 0).sum())
             n_total = n_pos + n_neg
             if n_pos == 0 or n_neg == 0:
-                flash(
+                msg(
                     f"⚠️ Skipped '{display_name}': only one class present ({classes}) — a classifier "
                     "needs both classes. This is what caused the earlier 'Toxicity score' crash at ranking.",
                     "error",
@@ -845,30 +946,34 @@ def train():
                 continue
             minority = min(n_pos, n_neg)
             if minority < 5:
-                flash(
+                msg(
                     f"⚠️ '{display_name}': severe class imbalance (minority class = {minority} of "
-                    f"{n_total}). The resulting model will be unreliable.", "error"
+                    f"{n_total}). The resulting model will be unreliable.",
+                    "error",
                 )
             elif minority < 10:
-                flash(
+                msg(
                     f"ℹ️ '{display_name}': small minority class ({minority} of {n_total}) — "
-                    "consider collecting more data for this class.", "info"
+                    "consider collecting more data for this class.",
+                    "info",
                 )
             valid_tasks.append((task_key, label_col, display_name))
 
         tasks_to_train = valid_tasks
         if not tasks_to_train:
-            flash("No valid tasks to train after data validation. Fix the issues above and try again.", "error")
-            return redirect(url_for("train"))
+            msg("No valid tasks to train after data validation. Fix the issues above and try again.", "error")
+            _write_job(job_id, sess_dir=sess_dir, status="error", stage="No valid tasks", messages=list(messages))
+            return
 
         all_metrics = {}
         all_graphs = {}
         all_best_params = {}
-        export_files = {}  # task_key -> {predictions, metrics} CSV names
+        export_files = {}
         combined_task_names = []
         overwritten = False
 
         for task_key, label_col, display_name in tasks_to_train:
+            msg(f"Training {display_name} model…" + (" (hyper-parameter tuning)" if tune else ""))
             X, y, descriptor_cols, impute_medians = load_features_and_labels(str(features_path), label_col)
             model, best_params, splits = train_random_forest(
                 X, y, random_state=42, tune=tune,
@@ -876,7 +981,6 @@ def train():
             )
             X_train, X_test, y_train, y_test = splits
 
-            # Evaluate
             eval_dir = sess_dir / f"eval_{task_key}"
             eval_dir.mkdir(exist_ok=True)
             metrics = evaluate_model(
@@ -885,10 +989,6 @@ def train():
             )
             all_metrics[task_key] = metrics
 
-            # ── Export test-set predictions + metrics CSV (notebook 1.6a/2.6a) ──
-            # Mirror the students' Colab notebook: save per-compound held-out test
-            # predictions and a one-row metrics summary so Chapter IV has the
-            # actual numbers to analyze, not just the on-screen graphs.
             y_test_pred = model.predict(X_test)
             y_test_proba = model.predict_proba(X_test)[:, 1]
             test_ids = (
@@ -918,7 +1018,6 @@ def train():
 
             combined_task_names.append(display_name.title() if display_name not in ("activity", "toxicity") else task_key.title())
 
-            # ROC Curve
             from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix
             y_test_proba = model.predict_proba(X_test)[:, 1]
             y_train_proba = model.predict_proba(X_train)[:, 1]
@@ -933,7 +1032,6 @@ def train():
             ax.legend(fontsize=9); fig.tight_layout()
             all_graphs[f"roc_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
-            # Confusion Matrix
             cm = confusion_matrix(y_test, model.predict(X_test))
             fig, ax = plt.subplots(figsize=(4, 3.5))
             sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax,
@@ -943,7 +1041,6 @@ def train():
             fig.tight_layout()
             all_graphs[f"cm_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
-            # Feature Importance
             importances = calibrated_estimator(model).feature_importances_
             idx = np.argsort(importances)[::-1][:15]
             fig, ax = plt.subplots(figsize=(7, 5))
@@ -955,7 +1052,6 @@ def train():
             fig.tight_layout()
             all_graphs[f"importance_{task_key}"] = fig_to_b64(fig); plt.close(fig)
 
-            # Topological Indices
             topo_indices = ["Wiener", "Zagreb1", "Zagreb2", "Balaban_RDKit"]
             topo_imps = {}
             for feat_name in topo_indices:
@@ -978,26 +1074,23 @@ def train():
                 all_graphs[f"topo_data_{task_key}"] = {k: round(v, 6) for k, v in topo_imps.items()}
                 plt.close(fig)
 
-            # Save model (with training-time cleaning metadata)
             model_path = sess_dir / f"{task_key}_model.pkl"
             save_model_with_metadata(model, str(model_path), descriptor_cols, impute_medians)
             shared_path = app.config["MODEL_FOLDER"] / f"{task_key}_{model_name}.pkl"
             if shared_path.exists():
                 overwritten = True
             save_model_with_metadata(model, str(shared_path), descriptor_cols, impute_medians)
-            # Record who owns this shared model
-            save_model_owner(model_name, current_user.username)
+            save_model_owner(model_name, username)
 
             if tune and best_params:
                 all_best_params[task_key] = best_params
 
-        # 7. Render results
+        msg("Training complete — rendering results…")
         preview_cols = [c for c in df.columns if c not in ("mol",)]
         dataset_preview = df[preview_cols].head(10).to_dict(orient="records")
         dataset_columns = list(preview_cols)
 
-        return render_template(
-            "train_result.html",
+        result_ctx = dict(
             tasks=combined_task_names,
             all_metrics=all_metrics,
             all_graphs=all_graphs,
@@ -1010,18 +1103,59 @@ def train():
             dataset_columns=dataset_columns,
             overwritten=overwritten,
             export_files=export_files,
-            session_id=session.get("session_id"),
+        )
+        # session_id is filled at render time from the polling request's cookie
+        _write_job(
+            job_id,
+            sess_dir=sess_dir,
+            status="done",
+            stage="Done",
+            messages=list(messages),
+            result=_coerce_context(result_ctx),
         )
 
     except KeyError as e:
-        flash(f"Missing column: {e}. Make sure your CSV has the required label column(s).", "error")
-        return redirect(url_for("train"))
+        msg(f"Missing column: {e}. Make sure your CSV has the required label column(s).", "error")
+        _write_job(job_id, sess_dir=sess_dir, status="error", stage="Error", messages=list(messages))
     except ValueError as e:
-        flash(f"Data error: {e}", "error")
-        return redirect(url_for("train"))
+        msg(f"Data error: {e}", "error")
+        _write_job(job_id, sess_dir=sess_dir, status="error", stage="Error", messages=list(messages))
     except Exception as e:
-        flash(f"Unexpected error: {e}", "error")
+        import traceback
+        traceback.print_exc()
+        msg(f"Unexpected error: {e}", "error")
+        _write_job(job_id, sess_dir=sess_dir, status="error", stage="Error", messages=list(messages))
+
+
+@app.route("/train/status/<job_id>")
+@login_required
+def train_status(job_id):
+    """Live status page that polls /train/job/<job_id> via JS."""
+    job = _read_job(job_id)
+    if job.get("status") == "missing":
+        flash("Unknown training job.", "error")
         return redirect(url_for("train"))
+    return render_template("train_status.html", job_id=job_id)
+
+
+@app.route("/train/job/<job_id>")
+@login_required
+def train_job_status(job_id):
+    """JSON endpoint polled by the status page."""
+    job = _read_job(job_id)
+    return jsonify(job)
+
+
+@app.route("/train/result/<job_id>")
+@login_required
+def train_result(job_id):
+    """Render the finished training results (reuses train_result.html)."""
+    job = _read_job(job_id)
+    if job.get("status") != "done" or not job.get("result"):
+        return redirect(url_for("train_status", job_id=job_id))
+    ctx = dict(job["result"])
+    ctx["session_id"] = session.get("session_id")
+    return render_template("train_result.html", **ctx)
 
 
 # ── PREDICT ROUTE ───────────────────────────────────────────────────────────
@@ -1482,6 +1616,16 @@ def ranking():
 
         df = pd.concat(all_dfs, ignore_index=True)
         n_before = len(df)
+
+        MAX_RANKING_COMPOUNDS = 5000
+        if n_before > MAX_RANKING_COMPOUNDS:
+            flash(
+                f"Dataset too large for ranking: {n_before:,} compounds "
+                f"(max {MAX_RANKING_COMPOUNDS:,}). "
+                f"Reduce your input or enable deduplication.",
+                "error",
+            )
+            return redirect(url_for("ranking"))
 
         # Check if user wants deduplication (default: True)
         deduplicate = request.form.get("deduplicate", "on") == "on"

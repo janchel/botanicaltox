@@ -217,6 +217,12 @@ def train_random_forest(
     best_params : dict
         Best hyperparameters found (or defaults if tune=False).
     """
+    # Cap parallelism so gunicorn workers don't oversubscribe the CPU
+    # (e.g. 4 workers × n_jobs=-1 on a 2-CPU box thrashes and times out).
+    import os as _os
+
+    _n_jobs = int(_os.environ.get("CRABLOX_TRAIN_JOBS", "2"))
+
     # ── Scaffold-aware split when groups are provided ──
     if groups is not None:
         gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=random_state)
@@ -282,7 +288,7 @@ def train_random_forest(
                 param_grid=param_grid,
                 cv=cv,
                 scoring=scoring,
-                n_jobs=-1,
+                n_jobs=_n_jobs,
                 verbose=1,
             )
             search.fit(X_train, y_train, groups=groups_train)
@@ -293,7 +299,7 @@ def train_random_forest(
                 param_grid=param_grid,
                 cv=cv,
                 scoring=scoring,
-                n_jobs=-1,
+                n_jobs=_n_jobs,
                 verbose=1,
             )
             search.fit(X_train, y_train)
@@ -307,7 +313,7 @@ def train_random_forest(
             n_estimators=300,
             class_weight="balanced",
             random_state=random_state,
-            n_jobs=-1,
+            n_jobs=_n_jobs,
         )
         model.fit(X_train, y_train)
         best_params = model.get_params()

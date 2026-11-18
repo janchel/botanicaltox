@@ -16,6 +16,7 @@ import argparse
 import os
 import signal
 import sys
+import threading
 import warnings
 from pathlib import Path
 
@@ -43,6 +44,12 @@ def _sigfpe_handler(signum, frame):
     raise _SIGFPEError("SIGFPE: floating-point exception")
 
 
+def _can_use_signal() -> bool:
+    """signal.signal() only works in the main thread; in background worker
+    threads it raises ValueError. SIGFPE protection is skipped there."""
+    return isinstance(threading.current_thread(), threading._MainThread)
+
+
 def _sigfpe_protected(fn, mol):
     """Call an RDKit descriptor function with SIGFPE protection.
 
@@ -50,7 +57,15 @@ def _sigfpe_protected(fn, mol):
     can trigger SIGFPE via numpy.dot — a C-level signal that Python's
     except won't catch.  We install a temporary handler and return NaN
     on failure so the molecule isn't lost entirely.
+
+    In a non-main thread (e.g. a background training job) signal handlers
+    cannot be installed, so we fall back to a plain try/except.
     """
+    if not _can_use_signal():
+        try:
+            return fn(mol)
+        except Exception:
+            return np.nan
     old_handler = signal.signal(signal.SIGFPE, _sigfpe_handler)
     try:
         return fn(mol)
@@ -139,15 +154,22 @@ def compute_all_rdkit_descriptors(mol_list: list) -> pd.DataFrame:
     def _safe_row(mol):
         # Wrap batch computation with SIGFPE guard — BalabanJ in the
         # calculator can trigger a C-level floating-point exception that
-        # Python's except won't catch.
-        old_handler = signal.signal(signal.SIGFPE, _sigfpe_handler)
-        try:
-            row = list(calculator.CalcDescriptors(mol))
-            signal.signal(signal.SIGFPE, old_handler)
-            return row
-        except (_SIGFPEError, Exception):
-            signal.signal(signal.SIGFPE, old_handler)
-            pass
+        # Python's except won't catch.  Only install the handler in the
+        # main thread (signal.signal raises in background threads).
+        if _can_use_signal():
+            old_handler = signal.signal(signal.SIGFPE, _sigfpe_handler)
+            try:
+                row = list(calculator.CalcDescriptors(mol))
+                signal.signal(signal.SIGFPE, old_handler)
+                return row
+            except (_SIGFPEError, Exception):
+                signal.signal(signal.SIGFPE, old_handler)
+                pass
+        else:
+            try:
+                return list(calculator.CalcDescriptors(mol))
+            except Exception:
+                pass
         # Fallback: one descriptor at a time so a single failure can't
         # wipe out the whole molecule's features.
         row = []
