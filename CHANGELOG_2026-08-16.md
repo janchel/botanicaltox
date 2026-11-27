@@ -16,7 +16,7 @@
 - Added **Flask-Login** + **SQLite** user database (`instance/users.db` via `database.py`).
 - New pages: `templates/login.html`, `templates/register.html`.
 - Routes: `/login`, `/register`, `/logout`; protected ML routes with `@login_required`.
-- Default admin: `admin` / `admin123` (configurable via `.env` — `ADMIN_USERNAME`, `ADMIN_PASSWORD`).
+- Default admin: `admin` (password from `ADMIN_PASSWORD`, or auto-generated) (configurable via `.env` — `ADMIN_USERNAME`, `ADMIN_PASSWORD`).
 - **Admin approval flow**: self-registered users start PENDING; admin approves/rejects/deletes from the User Management page (`/admin/users`).
 - **Admin role management**: admins can **Promote/Demote** users to/from the admin role.
   - Guards: cannot change own role; cannot demote the **last admin**; invalid roles rejected.
