@@ -278,8 +278,18 @@ def create_default_admin():
     if count == 0:
         import os
         username = os.environ.get("ADMIN_USERNAME", "admin")
-        password = os.environ.get("ADMIN_PASSWORD", "admin123")
-        # Create default admin - CHANGE THIS PASSWORD IN PRODUCTION!
+        password = os.environ.get("ADMIN_PASSWORD", "").strip()
+        generated_password = False
+        if not password:
+            # No initial password configured: generate a one-time random one
+            # instead of falling back to a well-known default.
+            import secrets
+            password = secrets.token_urlsafe(12)
+            generated_password = True
         User.create(username, password, role="admin", approved=True)
-        print(f"  ⚠️  Created default admin user (username: {username}, password: {password})")
-        print("     Please change the password after first login!")
+        if generated_password:
+            print(f"  ⚠️  ADMIN_PASSWORD not set — generated one-time admin password: {password}")
+            print("     Copy it now, then change it after your first login.")
+        else:
+            print(f"  ⚠️  Created default admin user (username: {username})")
+            print("     Please change the password after first login!")
