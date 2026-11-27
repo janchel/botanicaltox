@@ -103,9 +103,9 @@ BEFORE YOU START — The Workflow
     │  H-Bond Acceptors (NumHAcceptors)  Rotatable Bonds          │
     │  Ring Count, Aromatic Rings     Fraction Csp3               │
     │  Bertz CT complexity index      Hall-Kier alpha             │
-    │  BCUT descriptors (6)           EState descriptors          │
-    │  PEOE / SMR / SlogP VSA (30+)   Morgan fingerprints         │
-    │  Fragment counts (85+)          ... and 80+ more            │
+    │  BCUT descriptors (8)           EState descriptors          │
+    │  PEOE / SMR / SlogP VSA (36)    Morgan FP densities         │
+    │  Fragment counts (85)           ... and 80+ more            │
     │                                                              │
     │  4 TOPOLOGICAL INDICES (also automatic)                     │
     │                                                              │
