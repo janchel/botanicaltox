@@ -116,9 +116,11 @@ BEFORE YOU START — The Workflow
     │  TOTAL: 221 numerical features from ONE SMILES string       │
     └──────────────────────────────────────────────────────────────┘
 
-    ⚠️  Requires RDKit 2026.03+ (conda-forge). The old pip rdkit-pypi
-        package (2022.09) only gives 208 descriptors and does NOT
-        match the Colab notebook's descriptor set.
+    ⚠️  The 217-descriptor set requires a modern RDKit (2026.x). Install it
+        with conda-forge (`conda install -c conda-forge rdkit`) or PyPI
+        (`pip install rdkit`). Do NOT use the legacy `rdkit-pypi` package
+        (2022.09, only 208 descriptors) — its features do not match the
+        reference notebook.
 
     This is why your CSV only needs TWO columns:
       • Smiles       → The structure (input)
@@ -155,6 +157,18 @@ BEFORE YOU START — The Workflow
         - Same SMILES, same label → first copy kept, rest dropped.
         - Same SMILES, different labels → all conflicting copies removed.
     A warning message will tell you what happened.
+
+    ⚙️  HOW THE COMPUTATION RUNS:
+      • Training runs in the BACKGROUND with live progress on the status
+        page, so long jobs are not cut off by the web server's timeout.
+      • Molecular descriptors are calculated in BATCHES, which keeps memory
+        usage low enough for small servers instead of loading every
+        molecule at once.
+      • Model fitting uses at most one worker per CPU core, and for more
+        than 20,000 rows the hyper-parameter search runs on a stratified
+        subsample (the final model is still trained on ALL rows).
+      • If the server restarts while a job is running, the status page
+        reports it as interrupted rather than appearing stuck.
 
 
 1.3  What to Check After Training
@@ -710,9 +724,10 @@ A: The model is 85% confident in its prediction. Scores close to 0.5
 
 Q: What is probability calibration?
 A: Random Forest scores naturally bunch up near 0 or 1, which makes
-   them unreliable as percentages. The app calibrates them (isotonic or
-   sigmoid) so a score of 0.80 genuinely means "80% likely". This is
-   important when scores are combined into a ranking.
+   them unreliable as percentages. The app calibrates them (sigmoid for
+   Activity, isotonic for Toxicity) so a score of 0.80 genuinely means
+   "80% likely". This is important when scores are combined into a
+   ranking.
 
 Q: What is scaffold-aware splitting?
 A: Chemically similar compounds (same molecular scaffold) are kept on
@@ -741,9 +756,12 @@ Q: What happens if I train with the same name twice?
 A: The old model is overwritten. A yellow warning banner confirms this.
 
 Q: Why did hyperparameter tuning fail with "n_splits cannot be greater"?
-A: Your dataset is too small. The app now auto-reduces CV folds for
-   small datasets (e.g., from 5-fold to 3-fold). Add more compounds
-   for better tuning results.
+A: That happens when the dataset (or the smaller class) has fewer samples
+   than the requested 5 folds. The app now adapts the fold count to the
+   smallest class, and uses plain shuffled folds if a class has only one
+   member. Add more compounds for better tuning results. On very large
+   datasets the search uses a 20,000-row stratified subsample to keep the
+   runtime reasonable; the final model still trains on every row.
 
 Q: Can I see what data I trained with after training?
 A: YES. The training results page shows a "Training Dataset" table
@@ -917,11 +935,17 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     ┌────────┬───────┬────────┬──────┬──────┬─────┬─────┐
     │ Smiles │ MolWt │ MolLogP│ TPSA │ Rings│ ... │Label│
     ├────────┼───────┼────────┼──────┼──────┼─────┼─────┤
-    │ CCO    │  46.1 │  -0.24 │ 20.2 │   0  │ ... │  0  │
+    │ CCO    │  46.1 │ -0.001 │ 20.2 │   0  │ ... │  0  │
     │ C1=CC..│  78.1 │   2.13 │  0.0 │   1  │ ... │  1  │
     │ CC(=O)O│  60.1 │  -0.17 │ 37.3 │   0  │ ... │  0  │
     └────────┴───────┴────────┴──────┴──────┴─────┴─────┘
     90 rows × 221 columns = 19,890 numbers for the model to learn from.
+
+    CLEANING (done automatically before training):
+    • Non-finite and extreme values (|x| > 1e10) are treated as missing.
+    • Descriptor columns that are missing in more than 5% of rows are dropped.
+    • Remaining gaps are filled with the TRAINING median, and those exact
+      medians are stored in the model and reused when predicting.
 
     STEP 5: TRAIN THE RANDOM FOREST
     ─────────────────────────────────
