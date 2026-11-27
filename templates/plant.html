@@ -11,8 +11,9 @@
             <div class="card-body p-4">
                 <p class="text-muted small mb-4">
                     Enter a plant name (scientific name works best) and optionally upload
-                    a photo for reference. The system will search PubChem for known compounds
-                    in that plant and predict their activity and toxicity.
+                    a photo for reference. The system will search its built-in database of
+                    medicinal plants for known compounds in that plant and predict their
+                    activity and toxicity.
                 </p>
 
                 <form method="POST" enctype="multipart/form-data" id="plantForm">
@@ -88,14 +89,14 @@
                     <span class="badge bg-primary rounded-circle p-2">1</span>
                     <div>
                         <strong>Enter plant name</strong><br>
-                        <small class="text-muted">Scientific name like <em>Artemisia annua</em> gives the best PubChem matches.</small>
+                        <small class="text-muted">Scientific name like <em>Artemisia annua</em> gives the best database matches.</small>
                     </div>
                 </div>
                 <div class="d-flex align-items-start gap-3 mb-3">
                     <span class="badge bg-primary rounded-circle p-2">2</span>
                     <div>
-                        <strong>PubChem lookup</strong><br>
-                        <small class="text-muted">The system searches PubChem for known chemical compounds from that plant.</small>
+                        <strong>Built-in database lookup</strong><br>
+                        <small class="text-muted">The system searches its offline plant-compound database (no API key or network needed).</small>
                     </div>
                 </div>
                 <div class="d-flex align-items-start gap-3">
@@ -129,7 +130,7 @@ dropZone.addEventListener('drop', e => {
 document.getElementById('plantForm').addEventListener('submit', () => {
     const btn = document.getElementById('submitBtn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Searching PubChem...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Searching plant database...';
 });
 </script>
 {% endblock %}

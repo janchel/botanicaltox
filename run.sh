@@ -8,8 +8,14 @@
 #
 # Overrides:
 #   PORT=8080 ./run.sh            → change port
-#   WEB_CONCURRENCY=4 ./run.sh    → change worker count
+#   WEB_CONCURRENCY=2 ./run.sh    → change worker count (default 2; on a
+#                                   1-vCPU host leave this at 1–2)
 #   GUNICORN_TIMEOUT=600 ./run.sh → change request timeout (default 300s)
+#
+# Training is CPU/RAM bound and runs in a background thread, so also tune:
+#   CRABLOX_TRAIN_JOBS=1          → sklearn parallelism (auto-clamped to cores)
+#   CRABLOX_DESC_BATCH_SIZE=1000  → RDKit batch size (lower = less peak RAM)
+#   CRABLOX_TUNE_MAX_ROWS=20000   → subsample size cap for hyper-param search
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 cd "$(dirname "$0")"

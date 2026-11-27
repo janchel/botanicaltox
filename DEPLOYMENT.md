@@ -26,12 +26,12 @@
       predict.py                   CLI prediction
       plant_predict.py             Plant compound lookup database
       requirements.txt             Python dependencies
-      run.sh                       Launcher (uses venv automatically)
+      run.sh                       Launcher (conda env first, then venv)
       README.md                    Project overview
       CHANGELOG_2026-08-16.md      Change log / tracing
       .env.example                 Template for environment configuration
 
-    Templates (13 files):
+    Templates (16 files):
       templates/base.html
       templates/index.html
       templates/login.html
@@ -39,6 +39,7 @@
       templates/admin_users.html
       templates/team.html
       templates/train.html
+      templates/train_status.html
       templates/train_result.html
       templates/predict.html
       templates/predict_result.html
@@ -62,7 +63,6 @@
       .gitignore                   Ignore rules
 
     Documentation:
-      GUIDE.md                     Technical installation / production guide
       USER_GUIDE.md                Student-facing user manual
       DEPLOYMENT.md                This file
 
@@ -154,8 +154,20 @@
     • OS:            Linux (Ubuntu 20.04+), macOS 12+, or Windows WSL2
     • Python:        3.10 or newer
     • RAM:           2 GB minimum, 4 GB recommended
+                     (training on tens of thousands of compounds needs 4 GB+;
+                     the 2 GB figure is for small demo datasets only)
+    • CPU:           1 vCPU works but training is slow; ≥2 cores recommended
     • Disk:          1 GB free (app + dependencies + datasets)
     • Network:       Port 5001 open for web access
+
+    ⚠️  Small / single-vCPU hosts (1 core, 2 GB RAM):
+         export CRABLOX_TRAIN_JOBS=1          # sklearn parallelism; auto-clamped
+                                             # to the core count by train_common.py
+         export CRABLOX_DESC_BATCH_SIZE=500  # lower RDKit batch = lower peak RAM
+         export CRABLOX_TUNE_MAX_ROWS=20000  # subsample cap for grid search
+
+       Training runs in a background thread, so it survives the gunicorn
+       request timeout, but it still shares the host's CPU and RAM.
 
 2.2  Python Packages
 ──────────────────────
@@ -164,7 +176,7 @@
 
     │ Package       │ Purpose                              │ Min Version     │
     │───────────────│──────────────────────────────────────│──────────────────│
-    │ rdkit         │ Molecular descriptor calculation     │ 2026.03+ (conda)│
+    │ rdkit         │ Molecular descriptor calculation     │ >=2023.09 (2026.x)│
     │ pandas        │ CSV/data handling                    │ 2.0              │
     │ scikit-learn  │ Random Forest ML                     │ 1.3              │
     │ matplotlib    │ Graph generation                     │ 3.7              │
@@ -176,19 +188,20 @@
     │ flask-login   │ User authentication & sessions       │ 0.6              │
     │ gunicorn      │ Production WSGI server               │ 22.0             │
     │ openai        │ AI explainer client                  │ 1.0              │
+    │ pubchempy     │ (legacy plant lookup; data is built-in)│ 1.0            │
+    │ python-dotenv │ Loads .env configuration             │ 1.0              │
 
     ⚠️  CRITICAL: RDKit version matters!
 
-        The app now requires RDKit 2026.03+ (217 molecular descriptors).
-        The old pip package "rdkit-pypi" is stuck at 2022.09 (208 descriptors)
-        and does NOT match the Colab notebook's descriptor set.
+        The pipeline expects the modern RDKit (2026.x) that exposes 217
+        descriptors. Both current distributions provide it:
 
-        USE CONDA/MINIFORGE (not pip) for RDKit:
-            conda create -n crablox python=3.10 rdkit=2026.03 -c conda-forge
+        • conda-forge:  conda install -c conda-forge rdkit=2026.03
+        • PyPI:         pip install rdkit        (requirements.txt pins >=2023.09)
 
-        If you use pip's rdkit-pypi, you get 208 descriptors and your
-        ranking results will NOT match the notebook (Spearman ~0.86).
-        With conda's RDKit 2026+, you get 217 descriptors (Spearman ~0.90).
+        Do NOT install the legacy "rdkit-pypi" package — it is frozen at
+        2022.09 with only 208 descriptors, so the feature set (and therefore
+        rankings) will not match the reference notebook.
 
 2.3  Optional
 ───────────────
@@ -225,20 +238,19 @@
     # Install remaining dependencies via pip
     pip install -r requirements.txt
 
-    ⚠️  DO NOT install rdkit-pypi via pip — it's stuck at 2022.09 (208 descriptors).
-        The conda-forge rdkit package gives you 2026.03+ (217 descriptors),
-        which matches the Colab notebook's descriptor set exactly.
+    ℹ️  requirements.txt installs the current PyPI `rdkit` package, which also
+        provides 2026.x / 217 descriptors. Just avoid the legacy `rdkit-pypi`.
 
-3.3  Alternative: pip Virtual Environment (NOT RECOMMENDED)
+3.3  Alternative: pip Virtual Environment
 ────────────────────────────────────────────────────────────
 
-    ⚠️  This gives you RDKit 2022.09 (208 descriptors), which does NOT
-        match the Colab notebook. Use conda (section 3.2) instead.
+    Works with current releases; this repo's own venv runs RDKit 2026.09,
+    pandas 3.x and numpy 2.x. Do not add `pip install "numpy<2"` or install
+    the legacy `rdkit-pypi` package.
 
     python3 -m venv venv
     source venv/bin/activate
     pip install -r requirements.txt
-    pip install "numpy<2"
 
 3.4  Create Required Directories
 ──────────────────────────────────
@@ -285,9 +297,16 @@
     # Or directly:
     ~/miniforge3/envs/crablox/bin/python app.py
 
-    # Production (multi-user):
+    # Production (multi-user) — worker count should match the host, not a fixed
+    # number. Each worker holds its own copy of RDKit/sklearn and training runs
+    # inside one of them:
     conda activate crablox
-    gunicorn -w 4 -b 0.0.0.0:5001 app:app
+    ./run.sh                       # defaults to 2 workers; see overrides below
+    WEB_CONCURRENCY=1 ./run.sh     # single-vCPU / 2 GB host
+    CRABLOX_TRAIN_JOBS=1 ./run.sh # keep sklearn single-process on small hosts
+
+    # Do NOT use `gunicorn -w 4` on a 1-core/2 GB box: four workers plus
+    # training oversubscribe the CPU and RAM.
 
     # Open: http://localhost:5001
 
@@ -332,6 +351,9 @@
     │ AI_API_KEY      │ (none)                           │ AI explainer      │
     │ AI_BASE_URL     │ https://ai.rebelstack.fun        │ AI endpoint       │
     │ AI_MODEL        │ jandel/free                      │ AI model name     │
+    │ CRABLOX_TRAIN_JOBS     │ min(2, cpu_count)       │ sklearn processes │
+    │ CRABLOX_DESC_BATCH_SIZE│ 1000                    │ RDKit batch size  │
+    │ CRABLOX_TUNE_MAX_ROWS  │ 20000                   │ tuning subsample  │
 
 4.2  App Settings (in app.py)
 ───────────────────────────────
@@ -353,7 +375,8 @@
     • Use gunicorn instead of Flask dev server
     • Put behind nginx reverse proxy
     • Set up SSL with Let's Encrypt
-    • See GUIDE.md Section 9 for full production setup
+    • See USER_GUIDE.md for student workflows and README.md for the
+      notebook-alignment/pipeline details
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -365,7 +388,7 @@
     ├── .env.example
     ├── requirements.txt
     ├── app.py                       ← Main entry point
-    ├── run.sh                       ← Auto-detects conda/pip env
+    ├── run.sh                       ← Auto-detects conda then venv
     ├── ai_explainer.py
     ├── extract_features.py
     ├── train_common.py
@@ -374,13 +397,17 @@
     ├── evaluate.py
     ├── predict.py
     ├── plant_predict.py
-    ├── GUIDE.md
     ├── USER_GUIDE.md
     ├── DEPLOYMENT.md
     ├── templates/
     │   ├── base.html
     │   ├── index.html
+    │   ├── login.html
+    │   ├── register.html
+    │   ├── admin_users.html
+    │   ├── team.html
     │   ├── train.html
+    │   ├── train_status.html
     │   ├── train_result.html
     │   ├── predict.html
     │   ├── predict_result.html
@@ -390,6 +417,9 @@
     │   ├── ranking_result.html
     │   └── settings.html
     ├── datasets/
+    │   ├── toxicity_compounds.csv
+    │   ├── _ACTIVITY__105_COMPOUNDS_FINAL_TRAINING.csv
+    │   ├── prediction_compounds.xlsx
     │   ├── medchem_training.csv
     │   ├── medchem_prediction.csv
     │   ├── flavonoid_training.csv
@@ -417,7 +447,8 @@
     [ ] pip install -r requirements.txt
     [ ] mkdir -p models uploads sessions outputs/datasets
     [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
-    [ ] ./run.sh  (or: gunicorn -w 4 -b 0.0.0.0:5001 app:app)
+    [ ] ./run.sh  (workers default to 2; set WEB_CONCURRENCY=1 and
+        CRABLOX_TRAIN_JOBS=1 on a single-vCPU / 2 GB host)
     [ ] Open http://localhost:5001 → login with admin / admin123
     [ ] Change the admin password after first login
     [ ] Upload datasets/medchem_training.csv → Train → Predict

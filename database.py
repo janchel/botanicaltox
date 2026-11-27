@@ -293,7 +293,11 @@ class User:
 
 
 def create_default_admin():
-    """Create a default admin user if none exists."""
+    """Create a default admin user if none exists.
+
+    Safe to call from multiple gunicorn workers at boot: the check-then-insert
+    race is handled by treating a duplicate username as success.
+    """
     db = get_db()
     count = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     if count == 0:
@@ -301,6 +305,10 @@ def create_default_admin():
         username = os.environ.get("ADMIN_USERNAME", "admin")
         password = os.environ.get("ADMIN_PASSWORD", "admin123")
         # Create default admin - CHANGE THIS PASSWORD IN PRODUCTION!
-        User.create(username, password, role="admin", approved=True)
-        print(f"  ⚠️  Created default admin user (username: {username}, password: {password})")
-        print("     Please change the password after first login!")
+        try:
+            User.create(username, password, role="admin", approved=True)
+            print(f"  ⚠️  Created default admin user (username: {username}, password: {password})")
+            print("     Please change the password after first login!")
+        except ValueError:
+            # Another worker/process created the admin first — already initialized.
+            db.rollback()

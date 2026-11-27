@@ -13,7 +13,7 @@ Built by **The Science and Technology Education Center (STEC) — Batch of 2027*
 - **Train ML models** — upload CSV/Excel with SMILES + labels, train Random Forest classifiers, view metrics, ROC curves, confusion matrices, and feature importance.
 - **Export test results** — after training, download the held-out **test-set predictions** and a one-row **metrics summary** as CSV (mirrors the students' Colab notebook 1.6a/2.6a).
 - **Predict compounds** — upload SMILES and get instant activity & toxicity predictions (downloadable as CSV).
-- **Plant search** — enter a plant name; the app looks up its known compounds (PubChem) and predicts their properties.
+- **Plant search** — enter a plant name; the app looks up its known compounds in the built-in plant database (offline, no API key) and predicts their properties.
 - **Rank compounds** — sort candidates by 4 selectable priority formulas: Multiplicative (Activity × Safety), Subtractive, Safety-Weighted, or Weighted (custom importance). The **default Multiplicative** formula matches the reference notebook exactly, and the ranking export reproduces the notebook's `flavonoid_top15_shortlist` column format.
 - **Team page** — public page showcasing student members with profiles and pictures.
 - **User accounts** — login/registration with **admin approval**, and admin **promote/demote** of other admins.
@@ -71,7 +71,7 @@ botanicaltox/
 ├── plant_predict.py     # Plant compound lookup
 ├── ai_explainer.py      # Optional AI explanation of results
 ├── requirements.txt     # Python dependencies
-├── run.sh               # Launcher (auto-uses venv)
+├── run.sh               # Launcher (conda env first, then venv)
 ├── CHANGELOG_2026-08-16.md   # Change log / tracing
 ├── DEPLOYMENT.md        # Deployment guide
 ├── USER_GUIDE.md        # Detailed user guide
@@ -147,7 +147,7 @@ The reference pipeline lives in `CRABLOX_Colab_Complete_Pipeline.ipynb` — a Co
 | `extract_features.py` | `compute_topological_indices()` now returns the 4 notebook-aligned columns **Wiener, Zagreb1, Zagreb2, Balaban_RDKit** (added `balaban_index()` with SIGFPE protection, reused `_largest_fragment()`); added Ipc/AvgIpc SIGFPE protection | The training pipeline now actually includes Balaban (it previously only listed "BalabanJ" but never computed it), and the topo column names match the ranking route exactly so trained models align with ranking input |
 | `train_common.py` | Switched from `RandomizedSearchCV(ROC-AUC)` to `GridSearchCV(MCC)`, added task-specific param grids, task-specific calibration (sigmoid=activity, isotonic=toxicity) | Notebook uses MCC scoring and different calibration per task |
 | `train_common.py` | `load_features_and_labels()` now returns 4-tuple `(X, y, descriptor_cols, impute_medians)` with median imputation + drop cols >5% NaN | Matches notebook's preprocessing: impute with training medians, drop unstable descriptors |
-| `run.sh` | Prefers conda env `~/miniforge3/envs/crablox/` over pip venv | RDKit 2026.03 (217 descriptors) is only available via conda-forge, not pip |
+| `run.sh` | Prefers conda env `~/miniforge3/envs/crablox/` over pip venv | Both current conda-forge and PyPI `rdkit` provide the 2026.x descriptor set; conda is used first for parity with the reference notebook (legacy `rdkit-pypi` must be avoided) |
 | `app.py` | Training routes unpack 4-tuple, pass `task=` to `train_random_forest()` | Wires up the new calibration and param grid logic per task |
 | `app.py` | Train route validates labels **before** training: requires binary `{0,1}` with **both** classes present (single-class is rejected with an explanation), warns on missing/blank labels and severe class imbalance | Prevents silently training broken models that later crash ranking (e.g. the "Toxicity score" error from a single-class model) |
 
@@ -187,6 +187,25 @@ The **Multiplicative** option is identical to the notebook (`priority_score = ac
 - **`DEPLOYMENT.md`** — setup on a fresh machine / production
 - **`CHANGELOG_2026-08-16.md`** — record of changes from the original "Drug AI" app
 - **`models/README.md`** — trained model conventions
+
+---
+
+## ⚙️ Performance on Small Servers
+
+Training runs in a background thread, so long jobs no longer hit the gunicorn
+request timeout. Descriptor extraction is batched (molecules are parsed and
+discarded a batch at a time), which keeps the per-molecule memory overhead
+bounded; the final feature matrix still scales with the number of rows. On a
+single-vCPU / 2 GB host, set:
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `CRABLOX_TRAIN_JOBS` | `min(2, CPU cores)` | scikit-learn joblib processes; auto-clamped to the core count |
+| `CRABLOX_DESC_BATCH_SIZE` | `1000` | Molecules per RDKit batch (lower = less peak RAM) |
+| `CRABLOX_TUNE_MAX_ROWS` | `20000` | Above this many training rows, hyper-parameter search uses a stratified subsample (the final model still trains on all rows) |
+
+See `DEPLOYMENT.md` §2.1/§4.1. Large datasets also need CPU time: descriptor
+extraction and random-forest tuning are inherently slow on one core.
 
 ---
 

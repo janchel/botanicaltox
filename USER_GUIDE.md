@@ -143,7 +143,9 @@ BEFORE YOU START — The Workflow
        "Blood-Brain Barrier". This name appears in results instead of
        "Activity" or "Toxicity". Leave blank to use the defaults.
     5. (Optional) Enter a LABEL COLUMN NAME if your CSV uses a
-       different column (e.g., "Flavonoid_Label"). Auto-detected if blank.
+       different column (e.g., "Flavonoid_Label"). Leave blank to use the
+       default for the selected task (Activity_Label / Toxicity_Label).
+       Custom label names are NOT auto-detected — type the exact column name.
     6. Enter a MODEL / DATASET NAME (e.g., "library1", "fda_approved").
     7. Optional: Enable "Hyperparameter Tuning" for better accuracy.
     8. Click "Train Model"
@@ -167,7 +169,6 @@ BEFORE YOU START — The Workflow
     │  SMILES, and labels. Use this to VERIFY your data was loaded    │
     │  correctly before trusting the model's results.                │
     │                                                                 │
-    │  Class distribution is shown: "Class 1: 14 | Class 0: 16"      │
     │  Model/dataset name is displayed in the header.                 │
     └─────────────────────────────────────────────────────────────────┘
 
@@ -345,13 +346,17 @@ BEFORE YOU START — The Workflow
     descriptors from each SMILES string. You don't need to add any
     chemical properties to the file.
 
-    The OUTPUT will have these ADDED columns:
+    The OUTPUT will have these ADDED columns (for each selected task):
       Activity_Prediction  → 1 (active) or 0 (inactive)
       Activity_Score       → Confidence (0.00 to 1.00)
       Toxicity_Prediction  → 1 (toxic) or 0 (safe)
       Toxicity_Score       → Confidence (0.00 to 1.00)
 
-    So your 2-column input becomes a 6-column result.
+    It also adds Chemical_Class plus the human-readable
+    Activity_Label_Text / Toxicity_Label_Text columns.
+
+    So a Compound_ID + Smiles input becomes a 9-column result when both
+    tasks are run.
 
 2.1c  Why a Separate Dataset for Prediction?
 ──────────────────────────────────────────────
@@ -397,7 +402,7 @@ BEFORE YOU START — The Workflow
     ┌─────────────────────────────────────────────────────────────────┐
     │  🧬 COMPOUND STRUCTURES                                         │
     │                                                                 │
-    │  Shows the 2D chemical structure of the first 8 compounds.      │
+    │  Shows the 2D chemical structure of up to the first 50 compounds.│
     │  Atoms are labeled (C, H, N, O, etc.) and bonds are shown.      │
     │  This is the same visualization as RDKit's MolToImage().        │
     └─────────────────────────────────────────────────────────────────┘
@@ -411,6 +416,8 @@ BEFORE YOU START — The Workflow
     │  Activity_Score       → Probability of being active (0 to 1)    │
     │  Toxicity_Prediction  → 1 = Toxic, 0 = Safe (green/red)        │
     │  Toxicity_Score       → Probability of being toxic (0 to 1)     │
+    │  Chemical_Class       → e.g. Aromatic, Heterocycle, Amine       │
+    │  Activity_Label_Text / Toxicity_Label_Text → human-readable    │
     │                                                                 │
     │  HOW TO READ SCORES:                                             │
     │    > 0.75  = High confidence prediction                         │
@@ -455,7 +462,7 @@ BEFORE YOU START — The Workflow
 ═══════════════════════════════════════════════════════════════════════════════
 
     Instead of uploading SMILES, you can search by plant name. The app
-    has a built-in database of 21 medicinal plants with 80+ known compounds.
+    has a built-in database of 21 medicinal plants with 60+ known compounds.
 
 3.1  How to Use
 ─────────────────
@@ -520,7 +527,7 @@ BEFORE YOU START — The Workflow
 
     The results page shows:
       • Your uploaded photo (if any) beside the plant name
-      • Chemical structures of the first 8 compounds found
+      • Chemical structures of up to the first 50 compounds found
       • Prediction table: each compound's activity & toxicity
       • AI explanation (optional — click "Explain These Results")
 
@@ -670,16 +677,17 @@ BEFORE YOU START — The Workflow
 4.7  Download Results
 ───────────────────────
 
-    Click "Download CSV" to save the complete ranked list. The CSV
-    contains ALL compounds (not just top 15), sorted by Priority Score
-    from highest to lowest.
+    Two downloads are offered: "Full CSV" (all compounds, sorted by Priority
+    Score from highest to lowest) and "Top 15 CSV" (the notebook-style
+    shortlist).
 
-    The CSV includes:
-    - Compound_ID, Smiles, Source_File
-    - Activity_Prediction, Activity_Score
-    - Toxicity_Prediction, Toxicity_Score
-    - Safety_Score, Priority_Score
-    - Chemical_Class, Activity_Label_Text, Toxicity_Label_Text
+    Both files use the notebook's column order:
+    - Rank, Compound_ID, Smiles
+    - Wiener, Zagreb1, Zagreb2, Balaban_RDKit
+    - activity_score, Activity_Predicted_Label
+    - toxicity_score, Toxicity_Predicted_Label
+    - safety_score, priority_score
+    - Source_File (only when multiple files were uploaded)
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -742,8 +750,9 @@ A: YES. The training results page shows a "Training Dataset" table
    with the first 10 rows — Compound IDs, SMILES, and labels.
 
 Q: Are my uploaded files saved permanently?
-A: No. They're auto-cleaned after 24 hours. Trained models (.pkl files)
-   are kept until you overwrite or delete them.
+A: No. Session folders older than 24 hours are deleted whenever the server
+   starts; until the next restart they stay on disk. Trained models
+   (.pkl files) are kept until you overwrite or delete them.
 
 Q: Who can delete a trained model?
 A: Only the OWNER (the user who trained it) or an ADMIN. Other users see
@@ -868,23 +877,24 @@ A: They measure molecular shape and branching complexity. Higher Wiener
 
     STEP 3: COMPUTE DESCRIPTORS
     ─────────────────────────────
-    RDKit calculates 221 numbers from the molecular graph:
+    RDKit calculates 217 descriptors, and the pipeline adds 4 topological
+    indices — 221 features in total:
 
     ┌──────────────────────┬────────────────────┬──────────────────┐
     │  Descriptor          │  What It Measures   │  Ethanol Value   │
     ├──────────────────────┼────────────────────┼──────────────────┤
     │  MolWt               │  Molecular weight   │  46.07 g/mol     │
-    │  MolLogP             │  Lipophilicity      │  -0.24           │
+    │  MolLogP             │  Lipophilicity      │  -0.0014         │
     │  TPSA                │  Polar surface area │  20.23 Å²        │
     │  NumHDonors          │  H-bond donors      │  1               │
     │  NumHAcceptors       │  H-bond acceptors   │  1               │
-    │  NumRotatableBonds   │  Flexibility        │  0               │
+    │  NumRotatableBonds   │  Flexibility        │  1               │
     │  FractionCSP3        │  sp3 carbon ratio   │  1.0             │
     │  RingCount           │  Number of rings    │  0               │
     │  NumAromaticRings    │  Aromatic rings     │  0               │
-    │  BalabanJ            │  Molecular shape    │  0.0             │
-    │  WienerIndex         │  Compactness        │  1.0             │
-    │  ... and ~200 more   │                     │                  │
+    │  Balaban_RDKit       │  Molecular shape    │  1.633           │
+    │  Wiener              │  Compactness        │  4.0             │
+    │  ... and 210 more    │                     │                  │
     └──────────────────────┴────────────────────┴──────────────────┘
 
     Compare to BENZENE (C1=CC=CC=C1):

@@ -147,6 +147,12 @@ def main():
     X = df.drop(columns=list(drop_cols & set(df.columns)), errors="ignore")
     X = X.select_dtypes(include=[np.number])
 
+    # Match the exact column set/order the model was trained on (same helper
+    # the web prediction route uses) so a reordered/extra feature column set
+    # doesn't make sklearn raise a feature-name mismatch.
+    from train_common import align_features_for_model
+    X = align_features_for_model(X, model)
+
     print(f"[3/3] Evaluating...")
     evaluate_standalone(model, X, y, task_name, args.output_dir)
     print("\nDone!")

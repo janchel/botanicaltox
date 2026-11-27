@@ -221,7 +221,7 @@
         <p class="small text-muted mb-0">
             <strong>Models</strong> are stored in <code>models/</code> and persist until deleted.
             <br>
-            <strong>Uploaded files & sessions</strong> are stored in <code>sessions/</code> and auto-cleaned after 24 hours.
+            <strong>Uploaded files & sessions</strong> are stored in <code>sessions/</code> and removed at server startup once they are older than 24 hours.
             <br>
             <strong>Plant photos</strong> are never saved to disk — they exist only in memory during the request.
         </p>

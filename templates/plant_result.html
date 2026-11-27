@@ -13,11 +13,11 @@
         <h2 class="fw-bold mb-1">
             <i class="bi bi-flower1 text-success"></i> {{ plant_name }}
         </h2>
-        <p class="text-muted">{{ compounds_found }} compounds found in PubChem</p>
+        <p class="text-muted">{{ compounds_found }} compounds found in the built-in plant database</p>
     </div>
     {% if photo_b64 %}
     <div class="col-md-4 text-end">
-        <img src="data:image/jpeg;base64,{{ photo_b64 }}"
+        <img src="data:{{ photo_mime | default('image/jpeg') }};base64,{{ photo_b64 }}"
              alt="Photo of {{ plant_name }}"
              style="max-height:120px; border-radius:12px; border:2px solid #e2e8f0;">
     </div>

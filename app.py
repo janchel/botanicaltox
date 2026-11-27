@@ -17,6 +17,7 @@ Run:
 import io
 import os
 import json
+import time
 import uuid
 import threading
 import functools
@@ -51,6 +52,7 @@ from flask import (
     flash, send_file, session, jsonify, Response, stream_with_context,
 )
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     login_required, current_user
@@ -65,11 +67,12 @@ from extract_features import (
     create_molecules,
     compute_all_rdkit_descriptors,
     compute_topological_indices,
+    compute_features_in_batches,
     clean_descriptor_matrix,
     scaffold_id,
 )
 from train_common import (
-    load_features_and_labels,
+    split_features_and_label,
     train_random_forest,
     evaluate_model,
     save_model,
@@ -86,7 +89,15 @@ from database import init_db, close_db, create_default_admin, User
 # ── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__, instance_relative_config=True)
+# Trust the nginx reverse proxy's X-Forwarded-* headers so request.scheme,
+# request.host, and external URLs are correct behind TLS termination.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY", "crablox-2026-secret-key-change-in-production")
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB max upload
 app.config["UPLOAD_FOLDER"] = Path(__file__).resolve().parent / "uploads"
 app.config["MODEL_FOLDER"] = Path(__file__).resolve().parent / "models"
@@ -187,20 +198,27 @@ def _job_path(job_id: str, sess_dir: Path | None = None) -> Path:
     return Path(sess_dir) / f"job_{job_id}.json"
 
 
+_JOB_FILE_LOCK = threading.Lock()
+
+
 def _write_job(job_id: str, sess_dir: Path | None = None, **fields):
-    """Merge `fields` into the job JSON file (atomic-ish: write temp then rename)."""
-    import tempfile
-    p = _job_path(job_id, sess_dir)
-    data = {}
-    if p.exists():
-        try:
-            data = json.loads(p.read_text())
-        except Exception:
-            data = {}
-    data.update(fields)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, default=_json_default))
-    tmp.replace(p)
+    """Merge `fields` into the job JSON file (atomic-ish: write temp then rename).
+
+    A lock is held because the training thread and its heartbeat thread can
+    write different fields at the same time.
+    """
+    with _JOB_FILE_LOCK:
+        p = _job_path(job_id, sess_dir)
+        data = {}
+        if p.exists():
+            try:
+                data = json.loads(p.read_text())
+            except Exception:
+                data = {}
+        data.update(fields)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, default=_json_default))
+        tmp.replace(p)
 
 
 def _read_job(job_id: str, sess_dir: Path | None = None) -> dict:
@@ -697,6 +715,23 @@ def allowed_image(filename: str) -> bool:
         filename.rsplit(".", 1)[1].lower() in {"png", "jpg", "jpeg", "gif", "webp"}
 
 
+def sniff_image_mime(data: bytes, declared: str | None = None) -> str:
+    """Best-effort image MIME type from magic bytes.
+
+    Uploaded photos are embedded as data: URIs; assuming JPEG made PNG/WebP
+    uploads render as broken images, so sniff the actual bytes.
+    """
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    return declared or "image/jpeg"
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  ROUTES
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -746,14 +781,17 @@ def train():
     file.save(str(upload_path))
 
     # ── Quick validation (fast, before we hand off to the background thread) ──
+    # Read only a few rows: this runs inside the request, so loading a large
+    # CSV/Excel fully just to inspect its header needlessly spikes memory.
+    is_csv = upload_path.suffix.lower() == ".csv"
     try:
-        df = pd.read_csv(upload_path) if upload_path.suffix == ".csv" else pd.read_excel(upload_path)
+        head = pd.read_csv(upload_path, nrows=5) if is_csv else pd.read_excel(upload_path, nrows=5)
     except Exception as e:
         flash(f"Could not read file: {e}", "error")
         return redirect(url_for("train"))
 
     try:
-        smiles_col = parse_smiles_column(df)
+        smiles_col = parse_smiles_column(head)
     except ValueError:
         flash("No SMILES column found in the uploaded file.", "error")
         return redirect(url_for("train"))
@@ -764,7 +802,7 @@ def train():
     act_label = request.form.get("label_col", "").strip() or "Activity_Label"
     tox_label = request.form.get("label_col", "").strip() or "Toxicity_Label"
 
-    available_cols = set(df.columns)
+    available_cols = set(head.columns)
     missing_labels = []
     if train_activity and act_label not in available_cols:
         missing_labels.append(f"Activity_Label (needed for activity task)")
@@ -780,7 +818,8 @@ def train():
 
     # ── Launch background job ──
     job_id = uuid.uuid4().hex[:12]
-    _write_job(job_id, status="running", stage="Queued…", messages=[], result=None)
+    _write_job(job_id, status="running", stage="Queued…", messages=[], result=None,
+               heartbeat=time.time())
     params = dict(
         job_id=job_id,
         sess_dir=str(sess_dir),
@@ -817,9 +856,29 @@ def run_training_job(
         messages.append({"level": level, "text": text})
         _write_job(job_id, sess_dir=sess_dir, status="running", stage=text, messages=list(messages))
 
+    # Heartbeat: training runs in a daemon thread inside ONE gunicorn worker.
+    # If that worker is recycled (max-requests, deploy, OOM kill) the thread
+    # dies silently and the job would sit at "running" forever. This timestamp
+    # lets any worker notice the orphaned job and mark it interrupted.
+    stop_heartbeat = threading.Event()
+
+    def _heartbeat():
+        _write_job(job_id, sess_dir=sess_dir, heartbeat=time.time())
+        while not stop_heartbeat.wait(30):
+            _write_job(job_id, sess_dir=sess_dir, heartbeat=time.time())
+
+    threading.Thread(target=_heartbeat, daemon=True).start()
+
     try:
-        df = pd.read_csv(upload_path) if upload_path.suffix == ".csv" else pd.read_excel(upload_path)
+        is_csv = upload_path.suffix.lower() == ".csv"
+        df = pd.read_csv(upload_path) if is_csv else pd.read_excel(upload_path)
         smiles_col = parse_smiles_column(df)
+        if df.empty:
+            msg("The uploaded file contains no data rows.", "error")
+            _write_job(job_id, sess_dir=sess_dir, status="error",
+                       stage="Empty dataset", messages=list(messages))
+            return
+        df = df.reset_index(drop=True)
 
         # ── Duplicate detection ──
         dupes = df[smiles_col].duplicated()
@@ -862,30 +921,43 @@ def run_training_job(
                 )
 
         msg("Parsing molecules and computing RDKit descriptors…")
-        mol_list = create_molecules(df[smiles_col])
-        failed_count = sum(1 for m in mol_list if m is None)
+        batch_size = int(os.environ.get("CRABLOX_DESC_BATCH_SIZE", "1000"))
+
+        _last_report = 0
+
+        def _desc_progress(done, total, failed):
+            # Keep the status page moving during the long extraction phase,
+            # without rewriting the job file after every single batch.
+            nonlocal _last_report
+            if done - _last_report >= batch_size * 10 or done == total:
+                _last_report = done
+                msg(f"Descriptors: {done:,} / {total:,} compounds processed…")
+
+        # Batched extraction keeps peak memory ~constant instead of holding an
+        # explicit-H Mol object for every row at once (the old approach).
+        feat_all, failed_count = compute_features_in_batches(
+            df[smiles_col], batch_size=batch_size, progress=_desc_progress
+        )
         if failed_count:
             msg(
-                f"⚠️ {failed_count} of {len(mol_list)} SMILES failed to parse and were dropped. "
+                f"⚠️ {failed_count} of {len(feat_all)} SMILES failed to parse and were dropped. "
                 "Check your CSV for invalid SMILES strings.",
                 "error",
             )
-        valid_mask = [m is not None for m in mol_list]
-        if not all(valid_mask):
-            df = df[valid_mask].reset_index(drop=True)
-            mol_list = [m for m in mol_list if m is not None]
+        failed_mask = feat_all.isna().all(axis=1)
+        if failed_mask.any():
+            df = df[~failed_mask].reset_index(drop=True)
+            feat_all = feat_all[~failed_mask].reset_index(drop=True)
 
-        desc_df = compute_all_rdkit_descriptors(mol_list)
-        topo_df = compute_topological_indices(mol_list)
-
-        feat_all = pd.concat([desc_df, topo_df], axis=1)
+        # inplace=True mutates feat_all directly (no second full-size copy).
         feat_clean, descriptor_cols, impute_medians = clean_descriptor_matrix(
-            feat_all, feat_all.columns
+            feat_all, feat_all.columns, inplace=True
         )
 
         meta_cols = {"Compound_ID", "Name", "Smiles", "mol"}
         keep_cols = [c for c in df.columns if c not in meta_cols]
         feats = pd.concat([df[keep_cols].reset_index(drop=True), feat_clean], axis=1)
+        del feat_clean  # the concatenated frame is what we keep and reuse
 
         features_path = sess_dir / "features.csv"
         feats.to_csv(features_path, index=False)
@@ -904,28 +976,25 @@ def run_training_job(
 
         # ── Pre-training data validation ──
         valid_tasks = []
+        # Rows usable by EVERY selected task. Missing/invalid labels are removed
+        # before training (previously they were reported but left in the data,
+        # which made RandomForestClassifier.fit raise "y contains NaN").
+        label_valid = pd.Series(True, index=df.index)
         for task_key, label_col, display_name in tasks_to_train:
             if label_col not in df.columns:
                 msg(f"⚠️ Skipped '{display_name}': missing label column '{label_col}'.", "error")
                 continue
             y_raw = df[label_col]
+            y_num = pd.to_numeric(y_raw, errors="coerce")
             n_missing = int(y_raw.isna().sum())
-            if n_missing:
+            n_nonnum = int((y_num.isna() & y_raw.notna()).sum())
+            if n_missing or n_nonnum:
                 msg(
-                    f"⚠️ '{display_name}': {n_missing} row(s) have a missing/blank label "
-                    "and will be dropped before training.",
+                    f"⚠️ '{display_name}': {n_missing} missing and {n_nonnum} non-numeric "
+                    "label value(s) — these rows will be dropped before training.",
                     "error",
                 )
-            y_clean = y_raw.dropna()
-            try:
-                y_vals = y_clean.astype(int)
-            except (ValueError, TypeError):
-                msg(
-                    f"⚠️ Skipped '{display_name}': labels must be binary integers (0/1); "
-                    f"found non-numeric values.",
-                    "error",
-                )
-                continue
+            y_vals = y_num.dropna()
             classes = sorted(y_vals.unique().tolist())
             if classes != [0, 1]:
                 msg(
@@ -958,12 +1027,28 @@ def run_training_job(
                     "info",
                 )
             valid_tasks.append((task_key, label_col, display_name))
+            label_valid &= y_num.notna() & y_num.isin([0, 1])
 
         tasks_to_train = valid_tasks
         if not tasks_to_train:
             msg("No valid tasks to train after data validation. Fix the issues above and try again.", "error")
             _write_job(job_id, sess_dir=sess_dir, status="error", stage="No valid tasks", messages=list(messages))
             return
+
+        # Drop rows with missing/invalid labels for any selected task BEFORE
+        # training, keeping df / feats / scaffold groups aligned.
+        if not bool(label_valid.all()):
+            n_dropped = int((~label_valid).sum())
+            msg(
+                f"Dropped {n_dropped} row(s) with missing or invalid labels "
+                f"({len(df) - n_dropped} remaining).",
+                "error",
+            )
+            mask = label_valid.to_numpy()
+            df = df[mask].reset_index(drop=True)
+            feats = feats[mask].reset_index(drop=True)
+            if scaffold_groups is not None:
+                scaffold_groups = scaffold_groups[mask].reset_index(drop=True)
 
         all_metrics = {}
         all_graphs = {}
@@ -974,7 +1059,9 @@ def run_training_job(
 
         for task_key, label_col, display_name in tasks_to_train:
             msg(f"Training {display_name} model…" + (" (hyper-parameter tuning)" if tune else ""))
-            X, y, descriptor_cols, impute_medians = load_features_and_labels(str(features_path), label_col)
+            # Reuse the in-memory frame: no need to re-read features.csv and
+            # clean it a second time for each task.
+            X, y = split_features_and_label(feats, label_col)
             model, best_params, splits = train_random_forest(
                 X, y, random_state=42, tune=tune,
                 groups=scaffold_groups, task=task_key,
@@ -1016,7 +1103,10 @@ def run_training_job(
                 "metrics": f"{task_key}_test_metrics.csv",
             }
 
-            combined_task_names.append(display_name.title() if display_name not in ("activity", "toxicity") else task_key.title())
+            # Keep a custom task name exactly as typed (don't .title() it,
+            # which mangles names like "MyTestTask" -> "Mytesttask").
+            label = task_key.title() if display_name in ("activity", "toxicity") else display_name.strip()
+            combined_task_names.append(label)
 
             from sklearn.metrics import roc_curve, roc_auc_score, confusion_matrix
             y_test_proba = model.predict_proba(X_test)[:, 1]
@@ -1091,7 +1181,11 @@ def run_training_job(
         dataset_columns = list(preview_cols)
 
         result_ctx = dict(
-            tasks=combined_task_names,
+            # Lookup keys MUST be the task ids ('activity'/'toxicity') because
+            # metrics/graphs/exports are keyed that way; display labels are
+            # passed separately so custom task names still show in headings.
+            tasks=[task_key for task_key, _, _ in tasks_to_train],
+            task_labels=combined_task_names,
             all_metrics=all_metrics,
             all_graphs=all_graphs,
             all_best_params=all_best_params if tune else None,
@@ -1125,6 +1219,8 @@ def run_training_job(
         traceback.print_exc()
         msg(f"Unexpected error: {e}", "error")
         _write_job(job_id, sess_dir=sess_dir, status="error", stage="Error", messages=list(messages))
+    finally:
+        stop_heartbeat.set()
 
 
 @app.route("/train/status/<job_id>")
@@ -1138,11 +1234,30 @@ def train_status(job_id):
     return render_template("train_status.html", job_id=job_id)
 
 
+HEARTBEAT_TIMEOUT = 180  # seconds without a heartbeat ⇒ owner worker is gone
+
+
 @app.route("/train/job/<job_id>")
 @login_required
 def train_job_status(job_id):
     """JSON endpoint polled by the status page."""
     job = _read_job(job_id)
+    if job.get("status") == "running":
+        heartbeat = job.get("heartbeat")
+        try:
+            stale = heartbeat is None or (time.time() - float(heartbeat)) > HEARTBEAT_TIMEOUT
+        except (TypeError, ValueError):
+            stale = True
+        if stale:
+            messages = list(job.get("messages") or [])
+            messages.append({
+                "level": "error",
+                "text": "Training was interrupted because the server worker "
+                        "stopped (restart, deploy, or out-of-memory). Please "
+                        "start the training again.",
+            })
+            _write_job(job_id, status="error", stage="Interrupted", messages=messages)
+            job = _read_job(job_id)
     return jsonify(job)
 
 
@@ -1198,7 +1313,7 @@ def predict():
         import joblib
 
         # Load data
-        df = pd.read_csv(upload_path) if upload_path.suffix == ".csv" else pd.read_excel(upload_path)
+        df = pd.read_csv(upload_path) if upload_path.suffix.lower() == ".csv" else pd.read_excel(upload_path)
 
         # Check for SMILES column → extract features
         try:
@@ -1215,6 +1330,7 @@ def predict():
                     "info"
                 )
 
+        mol_list = []  # empty for pre-computed-feature uploads (no RDKit path)
         if smiles_col:
             mol_list = create_molecules(df[smiles_col])
             failed_count = sum(1 for m in mol_list if m is None)
@@ -1264,8 +1380,10 @@ def predict():
                 # Distribution pie chart
                 fig, ax = plt.subplots(figsize=(4, 4))
                 counts = results["Activity_Prediction"].value_counts()
-                labels = [f"{'Active' if k==1 else 'Inactive'} ({v})" for k, v in counts.items()]
-                ax.pie(counts, labels=labels, autopct="%1.1f%%",
+                # Explicit class order so colors always match the label.
+                vals = [int(counts.get(1, 0)), int(counts.get(0, 0))]
+                labels = [f"Active ({vals[0]})", f"Inactive ({vals[1]})"]
+                ax.pie(vals, labels=labels, autopct="%1.1f%%",
                        colors=["#2ecc71", "#e74c3c"], startangle=90)
                 ax.set_title("Activity Predictions")
                 fig.tight_layout()
@@ -1287,9 +1405,11 @@ def predict():
 
                 fig, ax = plt.subplots(figsize=(4, 4))
                 counts = results["Toxicity_Prediction"].value_counts()
-                labels = [f"{'Toxic' if k==1 else 'Safe'} ({v})" for k, v in counts.items()]
-                ax.pie(counts, labels=labels, autopct="%1.1f%%",
-                       colors=["#2ecc71", "#e74c3c"], startangle=90)
+                # Explicit class order so colors always match the label.
+                vals = [int(counts.get(1, 0)), int(counts.get(0, 0))]
+                labels = [f"Toxic ({vals[0]})", f"Safe ({vals[1]})"]
+                ax.pie(vals, labels=labels, autopct="%1.1f%%",
+                       colors=["#e74c3c", "#2ecc71"], startangle=90)
                 ax.set_title("Toxicity Predictions")
                 fig.tight_layout()
                 graphs["toxicity_pie"] = fig_to_b64(fig); plt.close(fig)
@@ -1303,9 +1423,13 @@ def predict():
             results["Toxicity_Label_Text"] = results["Toxicity_Prediction"].map(
                 {1: "Toxic to humans", 0: "Safe"}
             )
-        results["Chemical_Class"] = [classify_compound(m) for m in mol_list]
+        if mol_list:
+            results["Chemical_Class"] = [classify_compound(m) for m in mol_list]
+        else:
+            # Pre-computed-feature upload: no RDKit molecules available.
+            results["Chemical_Class"] = "Unknown"
 
-        # ── Generate molecule structure images (first 8) ──
+        # ── Generate molecule structure images (up to 50) ──
         mol_images = []
         if smiles_col and mol_list:
             for i, mol in enumerate(mol_list[:50]):
@@ -1395,7 +1519,7 @@ def predict():
 def plant():
     """
     GET:  Show the plant upload form (photo + name).
-    POST: Search PubChem for the plant's compounds, predict activity & toxicity.
+    POST: Look up the plant's compounds in the built-in database, predict activity & toxicity.
     """
     if request.method == "GET":
         available_models = list_available_models()
@@ -1410,17 +1534,20 @@ def plant():
 
     # Save uploaded photo (optional)
     photo_b64 = None
+    photo_mime = None
     photo_file = request.files.get("plant_photo")
     if photo_file and photo_file.filename:
         import base64 as _b64
-        photo_b64 = _b64.b64encode(photo_file.read()).decode("utf-8")
+        photo_bytes = photo_file.read()
+        photo_b64 = _b64.b64encode(photo_bytes).decode("utf-8")
+        photo_mime = sniff_image_mime(photo_bytes, getattr(photo_file, "mimetype", None))
 
     sess_dir = get_session_dir()
 
     try:
         import joblib
 
-        # Search PubChem
+        # Built-in (offline) plant-compound lookup
         compounds = search_plant_compounds(plant_name)
         if not compounds:
             # Try alternative search
@@ -1428,7 +1555,7 @@ def plant():
 
         if not compounds:
             flash(
-                f"No compounds found for '{plant_name}' in PubChem. "
+                f"No compounds found for '{plant_name}' in the built-in plant database. "
                 "Try a different plant name (scientific name works best, e.g. 'Artemisia annua').",
                 "error"
             )
@@ -1462,7 +1589,7 @@ def plant():
         results = df.copy()
         graphs = {}
 
-        # Generate molecule images (first 8)
+        # Generate molecule images (up to 50)
         mol_images = []
         for i, mol in enumerate(mol_list[:50]):
             img_b64 = mol_to_b64(mol)
@@ -1557,6 +1684,7 @@ def plant():
             "plant_result.html",
             plant_name=plant_name,
             photo_b64=photo_b64,
+            photo_mime=photo_mime,
             compounds_found=len(results),
             graphs=graphs,
             preview=preview,
@@ -1601,7 +1729,7 @@ def ranking():
             fname = secure_filename(f.filename)
             upload_path = sess_dir / fname
             f.save(str(upload_path))
-            df_part = pd.read_csv(upload_path) if upload_path.suffix == ".csv" else pd.read_excel(upload_path)
+            df_part = pd.read_csv(upload_path) if upload_path.suffix.lower() == ".csv" else pd.read_excel(upload_path)
             try:
                 smi_col = parse_smiles_column(df_part)
             except ValueError:
@@ -1841,6 +1969,7 @@ def ranking():
             model_name=selected_model,
             tasks=" + ".join(tasks_found),
             result_filename=result_path.name,
+            top15_filename=top15_path.name,
             session_id=session.get("session_id"),
             deduplicated=deduplicate,
             formula_display=formula_display,

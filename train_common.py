@@ -5,7 +5,7 @@ Shared training utilities for Random Forest classifiers used by both
 train_activity.py and train_toxicity.py.
 
 Handles: data loading, train/test split, model training, hyperparameter
-tuning via RandomizedSearchCV, evaluation, and model persistence.
+tuning via GridSearchCV, evaluation, and model persistence.
 """
 
 import argparse
@@ -94,6 +94,47 @@ def calibrated_estimator(model):
 
 # ── Data Loading ────────────────────────────────────────────────────────────
 
+NON_FEATURE_COLS = ("Compound_ID", "Name", "Smiles", "mol")
+OTHER_LABEL_COLS = ("Activity_Label", "Toxicity_Label", "activity", "toxicity")
+
+
+def split_features_and_label(
+    frame: pd.DataFrame,
+    label_col: str,
+    id_col: str | None = None,
+    smiles_col: str = "Smiles",
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Split a frame into a numeric feature matrix ``X`` and target ``y``.
+
+    Shared by :func:`load_features_and_labels` (file input) and the web
+    training job (already-cleaned in-memory frame), so both paths apply
+    exactly the same column-dropping rules.
+    """
+    if label_col not in frame.columns:
+        raise KeyError(
+            f"Label column '{label_col}' not found. "
+            f"Available columns: {list(frame.columns)}"
+        )
+    y = frame[label_col]
+
+    drop_cols = {label_col}
+    if id_col and id_col in frame.columns:
+        drop_cols.add(id_col)
+    for extra in NON_FEATURE_COLS:
+        if extra in frame.columns:
+            drop_cols.add(extra)
+    if smiles_col in frame.columns:
+        drop_cols.add(smiles_col)
+    # Avoid data leakage from any other label-like column.
+    for col in OTHER_LABEL_COLS:
+        if col in frame.columns and col != label_col:
+            drop_cols.add(col)
+
+    X = frame.drop(columns=list(drop_cols & set(frame.columns)), errors="ignore")
+    X = X.select_dtypes(include=[np.number])
+    return X, y
+
+
 def load_features_and_labels(
     features_path: str,
     label_col: str,
@@ -128,29 +169,22 @@ def load_features_and_labels(
             f"Available columns: {list(df.columns)}"
         )
 
-    y = df[label_col]
+    # Same column-dropping rules as the in-memory web training path.
+    X, y = split_features_and_label(df, label_col, id_col=id_col, smiles_col=smiles_col)
 
-    # Drop columns that are not features
-    drop_cols = {label_col}
-    if id_col and id_col in df.columns:
-        drop_cols.add(id_col)
-    for extra in ["Compound_ID", "Name", smiles_col, "mol"]:
-        if extra in df.columns:
-            drop_cols.add(extra)
+    # Supervised training cannot use rows with a missing target.
+    label_ok = y.notna()
+    if not bool(label_ok.all()):
+        print(f"  Dropped {int((~label_ok).sum())} row(s) with missing labels.")
+        X = X[label_ok]
+        y = y[label_ok]
 
-    # Also drop any other label-like columns to avoid data leakage
-    for col in ("Activity_Label", "Toxicity_Label", "activity", "toxicity"):
-        if col in df.columns and col != label_col:
-            drop_cols.add(col)
-
-    X = df.drop(columns=list(drop_cols & set(df.columns)), errors="ignore")
-
-    # Ensure all feature columns are numeric; drop non-numeric
-    X = X.select_dtypes(include=[np.number])
-
-    # Clean: replace inf → NaN, mask extreme values
-    X = X.replace([np.inf, -np.inf], np.nan)
-    X = X.mask(X.abs() > 1e10)
+    # Clean: replace inf → NaN, mask extreme values.
+    # In-place throughout so cleaning a large matrix doesn't allocate several
+    # full copies at once (the old code peaked at ~4× the feature matrix).
+    X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # Boolean comparisons use less temporary memory than abs() on wide frames.
+    X.mask((X > 1e10) | (X < -1e10), inplace=True)
 
     # Drop columns with >5% NaN (unstable descriptors — same as notebook)
     nan_frac = X.isna().mean()
@@ -161,10 +195,10 @@ def load_features_and_labels(
 
     # Impute remaining NaN with column medians (same as notebook)
     impute_medians = X.median().to_dict()
-    X = X.fillna(impute_medians)
+    X.fillna(impute_medians, inplace=True)
 
     # Clip extreme values
-    X = X.clip(lower=-1e10, upper=1e10)
+    X.clip(lower=-1e10, upper=1e10, inplace=True)
 
     print(f"  Features: {X.shape[1]} columns, {X.shape[0]} samples")
     print(f"  Labels:   class distribution =\n{y.value_counts().to_string()}")
@@ -183,7 +217,7 @@ def train_random_forest(
     calibrate: bool = True,
     scoring: str = "matthews_corrcoef",
     task: str | None = None,
-) -> tuple[object, dict]:
+) -> tuple[object, dict, tuple]:
     """
     Train a Random Forest classifier with optional hyperparameter tuning.
 
@@ -216,12 +250,22 @@ def train_random_forest(
         Trained (and optionally calibrated) model.
     best_params : dict
         Best hyperparameters found (or defaults if tune=False).
+    splits : tuple
+        ``(X_train, X_test, y_train, y_test)`` used for evaluation.
     """
     # Cap parallelism so gunicorn workers don't oversubscribe the CPU
     # (e.g. 4 workers × n_jobs=-1 on a 2-CPU box thrashes and times out).
+    # Auto-clamp to the available cores: a 1-vCPU host gets n_jobs=1, which
+    # also avoids joblib spawning extra processes that duplicate memory.
     import os as _os
 
-    _n_jobs = int(_os.environ.get("CRABLOX_TRAIN_JOBS", "2"))
+    _cores = max(1, _os.cpu_count() or 1)
+    _default_jobs = min(2, _cores)
+    try:
+        _n_jobs = int(_os.environ.get("CRABLOX_TRAIN_JOBS", _default_jobs))
+    except ValueError:
+        _n_jobs = _default_jobs
+    _n_jobs = max(1, min(_n_jobs, _cores))
 
     # ── Scaffold-aware split when groups are provided ──
     if groups is not None:
@@ -269,18 +313,69 @@ def train_random_forest(
                 "class_weight": ["balanced"],
             }
 
-        # Auto-adjust CV folds for small datasets (notebook uses min(5, class_count))
-        min_class_count = min(y_train.value_counts())
-        if task == "activity":
-            actual_folds = max(2, min(cv_folds, min_class_count))
-        else:
-            actual_folds = 5  # notebook uses fixed 5 for toxicity
+        # Auto-adjust CV folds for small datasets (notebook uses min(5, class_count)).
+        # This must hold for BOTH tasks: a minority class smaller than the fold
+        # count makes StratifiedKFold raise, which used to happen for toxicity
+        # because its fold count was hard-coded to 5.
+        min_class_count = int(min(y_train.value_counts()))
+
+        # A full grid search costs O(rows × combos × folds). On tens of thousands
+        # of rows and a single-core host that is effectively a hang, so tune on a
+        # stratified subsample instead. The winning configuration is still fit on
+        # ALL rows afterwards by CalibratedClassifierCV below.
+        tune_limit = int(_os.environ.get("CRABLOX_TUNE_MAX_ROWS", "20000"))
+        X_tune, y_tune, groups_tune = X_train, y_train, groups_train
+        # Only stratify when every class has at least 2 members, otherwise
+        # train_test_split raises.
+        strat = y_train if min_class_count >= 2 else None
+        if len(X_train) > tune_limit:
+            if groups_train is not None:
+                try:
+                    gss = GroupShuffleSplit(n_splits=1, train_size=tune_limit,
+                                            random_state=random_state)
+                    tune_idx, _ = next(gss.split(X_train, y_train, groups=groups_train))
+                    X_tune = X_train.iloc[tune_idx]
+                    y_tune = y_train.iloc[tune_idx]
+                    groups_tune = groups_train.iloc[tune_idx]
+                except ValueError:
+                    X_tune, _, y_tune, _ = train_test_split(
+                        X_train, y_train, train_size=tune_limit,
+                        stratify=strat, random_state=random_state,
+                    )
+                    groups_tune = None
+            else:
+                X_tune, _, y_tune, _ = train_test_split(
+                    X_train, y_train, train_size=tune_limit,
+                    stratify=strat, random_state=random_state,
+                )
+            min_class_count = int(min(y_tune.value_counts()))
+            print(
+                f"  Large dataset — tuning on a stratified subsample of "
+                f"{len(X_tune):,} rows (CRABLOX_TUNE_MAX_ROWS={tune_limit:,}); "
+                f"final model still trains on all {len(X_train):,} rows."
+            )
+
+        actual_folds = max(2, min(cv_folds, min_class_count))
         if actual_folds < cv_folds:
             print(f"  ⚠️  Small dataset detected — CV folds: {actual_folds}")
 
-        if groups_train is not None:
+        if min_class_count < 2:
+            # Stratification is impossible with a single-class split; use a
+            # plain shuffled K-fold so tuning can still run.
+            from sklearn.model_selection import KFold
+            cv = KFold(n_splits=min(2, len(y_tune)), shuffle=True, random_state=random_state)
+            search = GridSearchCV(
+                RandomForestClassifier(random_state=random_state),
+                param_grid=param_grid,
+                cv=cv,
+                scoring=scoring,
+                n_jobs=_n_jobs,
+                verbose=1,
+            )
+            search.fit(X_tune, y_tune)
+        elif groups_tune is not None:
             # Scaffold-grouped CV (never leaks near-duplicates into a fold)
-            n_groups = groups_train.nunique()
+            n_groups = groups_tune.nunique()
             group_folds = max(2, min(actual_folds, n_groups))
             cv = StratifiedGroupKFold(n_splits=group_folds, shuffle=True, random_state=random_state)
             search = GridSearchCV(
@@ -291,7 +386,7 @@ def train_random_forest(
                 n_jobs=_n_jobs,
                 verbose=1,
             )
-            search.fit(X_train, y_train, groups=groups_train)
+            search.fit(X_tune, y_tune, groups=groups_tune)
         else:
             cv = StratifiedKFold(n_splits=actual_folds, shuffle=True, random_state=random_state)
             search = GridSearchCV(
@@ -302,7 +397,7 @@ def train_random_forest(
                 n_jobs=_n_jobs,
                 verbose=1,
             )
-            search.fit(X_train, y_train)
+            search.fit(X_tune, y_tune)
 
         model = search.best_estimator_
         best_params = search.best_params_

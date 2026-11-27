@@ -4,9 +4,11 @@ extract_features.py
 Convert SMILES strings into numerical molecular descriptors using RDKit.
 
 This module is derived from the FINAL_MCS_TRAINING_2026.ipynb notebook.
-It reads compounds from an Excel/CSV file, generates ~210 standard RDKit
-descriptors plus Wiener, Zagreb M1, and Zagreb M2 topological indices,
-and writes the feature matrix to a CSV file.
+It reads compounds from an Excel/CSV file, generates the 217 RDKit 2026.03
+descriptors plus four topological indices (Wiener, Zagreb1, Zagreb2,
+Balaban_RDKit) — 221 features total — and writes the feature matrix to a
+CSV file. `compute_features_in_batches()` provides a lower-memory variant
+used by the web training pipeline.
 
 Usage:
     python extract_features.py --input datasets/compounds.xlsx --output datasets/features.csv
@@ -281,6 +283,79 @@ def compute_topological_indices(mol_list: list) -> pd.DataFrame:
     return result.clip(lower=-1e10, upper=1e10)
 
 
+def compute_features_in_batches(smiles_values, batch_size: int | None = None,
+                                progress=None):
+    """Compute descriptors + topological indices batch by batch.
+
+    Memory-friendly alternative to create_molecules() followed by
+    compute_all_rdkit_descriptors(): molecules are parsed, described and
+    discarded one batch at a time, so peak memory stays roughly constant
+    instead of growing with the number of rows. This matters on small
+    servers (the training pipeline runs inside a gunicorn worker with a
+    shared RAM budget).
+
+    Parameters
+    ----------
+    smiles_values : sequence of SMILES strings
+    batch_size : int, optional
+        Molecules per batch. Defaults to the CRABLOX_DESC_BATCH_SIZE env var
+        or 1000.
+    progress : callable, optional
+        Called as ``progress(done, total, failed)`` after each batch so the
+        caller can report progress during long extractions.
+
+    Returns
+    -------
+    (features, failed_count)
+        ``features`` is a DataFrame indexed 0..N-1 with the descriptor +
+        topological columns. Rows whose SMILES could not be parsed are
+        all-NaN so the caller can drop them with ``isna().all(axis=1)``.
+    """
+    if batch_size is None:
+        batch_size = int(os.environ.get("CRABLOX_DESC_BATCH_SIZE", "1000"))
+    batch_size = max(1, int(batch_size))
+
+    values = list(smiles_values)
+    total = len(values)
+    parts = []
+    failed = 0
+
+    for start in range(0, total, batch_size):
+        batch = values[start:start + batch_size]
+        mols = []
+        positions = []
+        for j, smi in enumerate(batch):
+            try:
+                mol = Chem.MolFromSmiles(str(smi))
+            except Exception:
+                mol = None
+            if mol is None:
+                failed += 1
+                continue
+            try:
+                mol = Chem.AddHs(mol)
+            except Exception:
+                failed += 1
+                continue
+            mols.append(mol)
+            positions.append(start + j)
+
+        if mols:
+            desc = compute_all_rdkit_descriptors(mols)
+            topo = compute_topological_indices(mols)
+            feat = pd.concat([desc, topo], axis=1)
+            feat.index = positions
+            parts.append(feat)
+        # mols go out of scope here — only this batch is ever held in memory.
+        if progress is not None:
+            progress(min(start + len(batch), total), total, failed)
+
+    if not parts:
+        return pd.DataFrame(), failed
+    out = pd.concat(parts)
+    return out.reindex(range(total)), failed
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Extract molecular descriptors from SMILES compounds."
@@ -359,7 +434,7 @@ def scaffold_id(smiles):
     return Chem.MolToInchiKey(mol).split("-")[0]
 
 
-def clean_descriptor_matrix(df, descriptor_cols, impute_medians=None):
+def clean_descriptor_matrix(df, descriptor_cols, impute_medians=None, inplace=False):
     """Robust descriptor cleaning ported from refinedd_code.ipynb.
 
     - Replaces inf with NaN
@@ -371,24 +446,35 @@ def clean_descriptor_matrix(df, descriptor_cols, impute_medians=None):
     - During PREDICTION (impute_medians=dict): reduces to exactly the kept
       columns and fills with the TRAINING medians (never recomputes).
 
+    ``inplace=True`` mutates ``df`` directly (used by training, where the raw
+    frame is discarded afterwards) so cleaning a large matrix doesn't allocate
+    another full-size copy.
+
     Returns (X_clean, keep_cols, medians).
     """
-    X = df[descriptor_cols].replace([np.inf, -np.inf], np.nan)
+    X = df if inplace else df[descriptor_cols]
     SAFE_MAX = 1e10
-    X = X.mask(X.abs() > SAFE_MAX)
+    X.replace([np.inf, -np.inf], np.nan, inplace=True)
+    # Boolean comparisons (1 byte/elem) instead of abs() (8 bytes/elem) keep the
+    # temporary mask small on wide feature matrices.
+    X.mask((X > SAFE_MAX) | (X < -SAFE_MAX), inplace=True)
 
     if impute_medians is None:
         nan_frac = X.isna().mean()
         keep_cols = nan_frac[nan_frac <= 0.05].index.tolist()
         if not keep_cols:
             keep_cols = descriptor_cols[:1]  # never return an empty feature set
-        X = X[keep_cols]
+        if inplace:
+            X.drop(columns=[c for c in X.columns if c not in keep_cols], inplace=True)
+        else:
+            X = X[keep_cols]
         medians = X.median().to_dict()
-        X = X.fillna(medians)
+        X.fillna(medians, inplace=True)
         return X, keep_cols, medians
     else:
         keep_cols = list(impute_medians.keys())
-        X = X[keep_cols].fillna(impute_medians)
+        X = X[keep_cols]
+        X.fillna(impute_medians, inplace=True)
         return X, keep_cols, impute_medians
 
 

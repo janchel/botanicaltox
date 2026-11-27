@@ -4,7 +4,8 @@ predict.py
 Load trained models and predict activity and toxicity for new compounds.
 
 Accepts:
-  - A CSV/Excel file with SMILES (auto-extracts features via RDKit)
+  - A CSV/Excel file with SMILES — pass --smiles-col to extract features via
+    RDKit (required; SMILES are not auto-detected here)
   - A CSV/Excel file with pre-computed features (skips RDKit)
 
 Usage:
