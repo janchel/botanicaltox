@@ -164,9 +164,11 @@ BEFORE YOU START — The Workflow
       • Molecular descriptors are calculated in BATCHES, which keeps memory
         usage low enough for small servers instead of loading every
         molecule at once.
-      • Model fitting uses at most one worker per CPU core, and for more
-        than 20,000 rows the hyper-parameter search runs on a stratified
-        subsample (the final model is still trained on ALL rows).
+      • Model fitting uses at most one worker per CPU core. Very large
+        datasets use a stratified subsample for the hyper-parameter search
+        (about 20,000 rows on small servers, 100,000 on bigger machines,
+        overridable with CRABLOX_TUNE_MAX_ROWS); the final model is still
+        trained on ALL rows.
       • If the server restarts while a job is running, the status page
         reports it as interrupted rather than appearing stuck.
 
@@ -760,8 +762,9 @@ A: That happens when the dataset (or the smaller class) has fewer samples
    than the requested 5 folds. The app now adapts the fold count to the
    smallest class, and uses plain shuffled folds if a class has only one
    member. Add more compounds for better tuning results. On very large
-   datasets the search uses a 20,000-row stratified subsample to keep the
-   runtime reasonable; the final model still trains on every row.
+   datasets the search uses a stratified subsample (about 20,000 rows on
+   small servers, 100,000 on bigger machines) to keep the runtime
+   reasonable; the final model still trains on every row.
 
 Q: Can I see what data I trained with after training?
 A: YES. The training results page shows a "Training Dataset" table

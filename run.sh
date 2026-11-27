@@ -15,7 +15,8 @@
 # Training is CPU/RAM bound and runs in a background thread, so also tune:
 #   CRABLOX_TRAIN_JOBS=1          → sklearn parallelism (auto-clamped to cores)
 #   CRABLOX_DESC_BATCH_SIZE=1000  → RDKit batch size (lower = less peak RAM)
-#   CRABLOX_TUNE_MAX_ROWS=20000   → subsample size cap for hyper-param search
+#   CRABLOX_TUNE_MAX_ROWS=100000 → subsample cap for hyper-param search
+#                                  (default: 20000 on <=2 cores, else 100000)
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 cd "$(dirname "$0")"

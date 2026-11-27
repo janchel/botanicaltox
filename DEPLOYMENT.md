@@ -355,7 +355,7 @@
     │ AI_MODEL        │ jandel/free                      │ AI model name     │
     │ CRABLOX_TRAIN_JOBS     │ min(2, cpu_count)       │ sklearn processes │
     │ CRABLOX_DESC_BATCH_SIZE│ 1000                    │ RDKit batch size  │
-    │ CRABLOX_TUNE_MAX_ROWS  │ 20000                   │ tuning subsample  │
+    │ CRABLOX_TUNE_MAX_ROWS  │ 20k (<=2 cores) / 100k  │ tuning subsample  │
 
 4.2  App Settings (in app.py)
 ───────────────────────────────

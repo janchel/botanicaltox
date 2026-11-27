@@ -323,7 +323,17 @@ def train_random_forest(
         # of rows and a single-core host that is effectively a hang, so tune on a
         # stratified subsample instead. The winning configuration is still fit on
         # ALL rows afterwards by CalibratedClassifierCV below.
-        tune_limit = int(_os.environ.get("CRABLOX_TUNE_MAX_ROWS", "20000"))
+        # Default tuning subsample scales with the host: small/single-core
+        # boxes get a conservative cap so grid search can't hang; bigger
+        # machines search far more rows. Override with CRABLOX_TUNE_MAX_ROWS
+        # (set to 0 for no subsampling).
+        _default_tune_limit = 20000 if _cores <= 2 else 100000
+        try:
+            tune_limit = int(_os.environ.get("CRABLOX_TUNE_MAX_ROWS", _default_tune_limit))
+        except ValueError:
+            tune_limit = _default_tune_limit
+        if tune_limit <= 0:
+            tune_limit = len(X_train)
         X_tune, y_tune, groups_tune = X_train, y_train, groups_train
         # Only stratify when every class has at least 2 members, otherwise
         # train_test_split raises.

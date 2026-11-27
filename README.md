@@ -202,7 +202,7 @@ single-vCPU / 2 GB host, set:
 |---------|---------|---------|
 | `CRABLOX_TRAIN_JOBS` | `min(2, CPU cores)` | scikit-learn joblib processes; auto-clamped to the core count |
 | `CRABLOX_DESC_BATCH_SIZE` | `1000` | Molecules per RDKit batch (lower = less peak RAM) |
-| `CRABLOX_TUNE_MAX_ROWS` | `20000` | Above this many training rows, hyper-parameter search uses a stratified subsample (the final model still trains on all rows) |
+| `CRABLOX_TUNE_MAX_ROWS` | `20000` (≤2 cores) / `100000` (>2 cores); `0` = no subsample | Above this many training rows, hyper-parameter search uses a stratified subsample (the final model still trains on all rows) |
 
 See `DEPLOYMENT.md` §2.1/§4.1. Large datasets also need CPU time: descriptor
 extraction and random-forest tuning are inherently slow on one core.
