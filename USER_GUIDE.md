@@ -139,7 +139,7 @@ BEFORE YOU START — The Workflow
        "Blood-Brain Barrier". This name appears in results instead of
        "Activity" or "Toxicity". Leave blank to use the defaults.
     5. (Optional) Enter a LABEL COLUMN NAME if your CSV uses a
-       different column (e.g., "Flavonoid_Label"). Auto-detected if blank.
+       different column (e.g., "Flavonoid_Label"). Leave blank to use the default for the selected task (Activity_Label / Toxicity_Label). Custom names are NOT auto-detected — type the exact column name.
     6. Enter a MODEL / DATASET NAME (e.g., "library1", "fda_approved").
     7. Optional: Enable "Hyperparameter Tuning" for better accuracy.
     8. Click "Train Model"
@@ -341,13 +341,17 @@ BEFORE YOU START — The Workflow
     descriptors from each SMILES string. You don't need to add any
     chemical properties to the file.
 
-    The OUTPUT will have these ADDED columns:
+    The OUTPUT will have these ADDED columns (for each selected task):
       Activity_Prediction  → 1 (active) or 0 (inactive)
       Activity_Score       → Confidence (0.00 to 1.00)
       Toxicity_Prediction  → 1 (toxic) or 0 (safe)
       Toxicity_Score       → Confidence (0.00 to 1.00)
 
-    So your 2-column input becomes a 6-column result.
+    It also adds Chemical_Class plus the human-readable
+    Activity_Label_Text / Toxicity_Label_Text columns.
+
+    So a Compound_ID + Smiles input becomes a 9-column result when both
+    tasks are run.
 
 2.1c  Why a Separate Dataset for Prediction?
 ──────────────────────────────────────────────
@@ -393,7 +397,7 @@ BEFORE YOU START — The Workflow
     ┌─────────────────────────────────────────────────────────────────┐
     │  🧬 COMPOUND STRUCTURES                                         │
     │                                                                 │
-    │  Shows the 2D chemical structure of the first 8 compounds.      │
+    │  Shows the 2D chemical structure of the first 50 compounds.     │
     │  Atoms are labeled (C, H, N, O, etc.) and bonds are shown.      │
     │  This is the same visualization as RDKit's MolToImage().        │
     └─────────────────────────────────────────────────────────────────┘
@@ -451,7 +455,7 @@ BEFORE YOU START — The Workflow
 ═══════════════════════════════════════════════════════════════════════════════
 
     Instead of uploading SMILES, you can search by plant name. The app
-    has a built-in database of 21 medicinal plants with 80+ known compounds.
+    has a built-in database of 21 medicinal plants with 60+ known compounds.
 
 3.1  How to Use
 ─────────────────
@@ -516,7 +520,7 @@ BEFORE YOU START — The Workflow
 
     The results page shows:
       • Your uploaded photo (if any) beside the plant name
-      • Chemical structures of the first 8 compounds found
+      • Chemical structures of up to the first 50 compounds found
       • Prediction table: each compound's activity & toxicity
       • AI explanation (optional — click "Explain These Results")
 
@@ -670,12 +674,9 @@ BEFORE YOU START — The Workflow
     contains ALL compounds (not just top 15), sorted by Priority Score
     from highest to lowest.
 
-    The CSV includes:
-    - Compound_ID, Smiles, Source_File
-    - Activity_Prediction, Activity_Score
-    - Toxicity_Prediction, Toxicity_Score
-    - Safety_Score, Priority_Score
-    - Chemical_Class, Activity_Label_Text, Toxicity_Label_Text
+    It is the full result table: your original columns plus
+    Activity_Prediction, Activity_Score, Toxicity_Prediction,
+    Toxicity_Score, Safety_Score and Priority_Score.
 
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -698,9 +699,10 @@ A: The model is 85% confident in its prediction. Scores close to 0.5
 
 Q: What is probability calibration?
 A: Random Forest scores naturally bunch up near 0 or 1, which makes
-   them unreliable as percentages. The app calibrates them (isotonic or
-   sigmoid) so a score of 0.80 genuinely means "80% likely". This is
-   important when scores are combined into a ranking.
+   them unreliable as percentages. The app calibrates them (isotonic for
+   training sets of 1,000 rows or more, sigmoid for smaller ones) so a
+   score of 0.80 genuinely means "80% likely". This is important when
+   scores are combined into a ranking.
 
 Q: What is scaffold-aware splitting?
 A: Chemically similar compounds (same molecular scaffold) are kept on
@@ -738,8 +740,9 @@ A: YES. The training results page shows a "Training Dataset" table
    with the first 10 rows — Compound IDs, SMILES, and labels.
 
 Q: Are my uploaded files saved permanently?
-A: No. They're auto-cleaned after 24 hours. Trained models (.pkl files)
-   are kept until you overwrite or delete them.
+A: No. Session folders older than 24 hours are deleted whenever the server
+   starts; until the next restart they stay on disk. Trained models
+   (.pkl files) are kept until you overwrite or delete them.
 
 Q: Who can delete a trained model?
 A: Only the OWNER (the user who trained it) or an ADMIN. Other users see
@@ -870,7 +873,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     │  Descriptor          │  What It Measures   │  Ethanol Value   │
     ├──────────────────────┼────────────────────┼──────────────────┤
     │  MolWt               │  Molecular weight   │  46.07 g/mol     │
-    │  MolLogP             │  Lipophilicity      │  -0.24           │
+    │  MolLogP             │  Lipophilicity      │  -0.0014         │
     │  TPSA                │  Polar surface area │  20.23 Å²        │
     │  NumHDonors          │  H-bond donors      │  1               │
     │  NumHAcceptors       │  H-bond acceptors   │  1               │
@@ -903,7 +906,7 @@ A: They measure molecular shape and branching complexity. Higher Wiener
     ┌────────┬───────┬────────┬──────┬──────┬─────┬─────┐
     │ Smiles │ MolWt │ MolLogP│ TPSA │ Rings│ ... │Label│
     ├────────┼───────┼────────┼──────┼──────┼─────┼─────┤
-    │ CCO    │  46.1 │  -0.24 │ 20.2 │   0  │ ... │  0  │
+    │ CCO    │  46.1 │ -0.001 │ 20.2 │   0  │ ... │  0  │
     │ C1=CC..│  78.1 │   2.13 │  0.0 │   1  │ ... │  1  │
     │ CC(=O)O│  60.1 │  -0.17 │ 37.3 │   0  │ ... │  0  │
     └────────┴───────┴────────┴──────┴──────┴─────┴─────┘
