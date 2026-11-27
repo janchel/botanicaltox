@@ -85,7 +85,16 @@ from database import init_db, close_db, create_default_admin, User
 # ── App Setup ───────────────────────────────────────────────────────────────
 
 app = Flask(__name__, instance_relative_config=True)
-app.secret_key = os.environ.get("SECRET_KEY", "crablox-2026-secret-key-change-in-production")
+# Security: never fall back to a hardcoded session key. SECRET_KEY must come
+# from the environment (.env); see .env.example.
+_secret_key = os.environ.get("SECRET_KEY", "").strip()
+if not _secret_key or _secret_key == "change-me-to-a-random-32-byte-hex-string":
+    raise RuntimeError(
+        "SECRET_KEY is missing or still set to the .env.example placeholder. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\" "
+        "and add it to .env. Refusing to start with an insecure default."
+    )
+app.secret_key = _secret_key
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB max upload
 app.config["UPLOAD_FOLDER"] = Path(__file__).resolve().parent / "uploads"
 app.config["MODEL_FOLDER"] = Path(__file__).resolve().parent / "models"
