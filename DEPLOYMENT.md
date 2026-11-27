@@ -278,8 +278,10 @@
 
       # Optional: AI_API_KEY for AI explanations
 
-    ⚠️  The app works without a .env file, but uses insecure defaults.
-        The default admin is created as admin/admin123 on first launch.
+    ⚠️  SECRET_KEY is required: the app refuses to start if it is missing or
+        still set to the .env.example placeholder. On first launch a
+        default admin is created: set ADMIN_PASSWORD in .env, otherwise a
+        random one-time password is printed.
 
 3.6  Start the Server
 ──────────────────────
@@ -323,7 +325,7 @@
 ───────────────────────────────────
 
     • Open http://localhost:5001/login
-    • Sign in with the default admin (admin / admin123) or the
+    • Sign in with the default admin (password from ADMIN_PASSWORD, or the generated one) or the
       ADMIN_USERNAME / ADMIN_PASSWORD from your .env file
     • ⚠️  Change the admin password after first login
 
@@ -347,7 +349,7 @@
     │─────────────────│──────────────────────────────────│───────────────────│
     │ SECRET_KEY      │ insecure built-in                │ Session signing   │
     │ ADMIN_USERNAME  │ admin                            │ First admin user  │
-    │ ADMIN_PASSWORD  │ admin123                         │ First admin pass  │
+    │ ADMIN_PASSWORD  │ (auto-generated if unset)      │ First admin pass  │
     │ AI_API_KEY      │ (none)                           │ AI explainer      │
     │ AI_BASE_URL     │ https://ai.rebelstack.fun        │ AI endpoint       │
     │ AI_MODEL        │ jandel/free                      │ AI model name     │
@@ -449,7 +451,7 @@
     [ ] (Optional) cp .env.example .env and set SECRET_KEY + admin password
     [ ] ./run.sh  (workers default to 2; set WEB_CONCURRENCY=1 and
         CRABLOX_TRAIN_JOBS=1 on a single-vCPU / 2 GB host)
-    [ ] Open http://localhost:5001 → login with admin / admin123
+    [ ] Open http://localhost:5001 → login with the admin password from .env (or the generated one)
     [ ] Change the admin password after first login
     [ ] Upload datasets/medchem_training.csv → Train → Predict
 
