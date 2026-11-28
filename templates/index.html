@@ -144,4 +144,84 @@
     </div>
 </div>
 
+<div class="crablox-sections">
+
+    <div class="crablox-section">
+        <h2 class="tag">How a compound is ranked</h2>
+        <p class="sub">A compound needs a high activity score and a low toxicity score. Move the sliders to see the priority change.</p>
+        <div class="calc">
+            <div>
+                <div class="rng mb-3">
+                    <label for="crab-a" class="flex-fill" style="margin:0;">Activity score</label>
+                    <output id="crab-av" for="crab-a">0.433</output>
+                </div>
+                <input id="crab-a" type="range" min="0" max="1" step="0.001" value="0.433">
+                <small class="d-block mt-1 mb-4">Chance the model gives that the compound blocks Class D &beta;-lactamases.</small>
+
+                <div class="rng mb-3">
+                    <label for="crab-t" class="flex-fill" style="margin:0;">Toxicity score</label>
+                    <output id="crab-tv" for="crab-t">0.483</output>
+                </div>
+                <input id="crab-t" type="range" min="0" max="1" step="0.001" value="0.483">
+                <small class="d-block mt-1">Chance the model gives that the compound is toxic to the liver.</small>
+                <p class="text-muted small mt-3 mb-0">Starting values are the top-ranked compound in the study (PubChem CID 445881).</p>
+            </div>
+            <div class="crab-panel res">
+                <div class="big" id="crab-pv" aria-live="polite">0.224</div>
+                <p>Priority score</p>
+                <div class="bar"><i id="crab-pb"></i></div>
+                <div class="formula">Safety = 1 &minus; Toxicity<br>Priority = Activity &times; Safety</div>
+                <p id="crab-sv" class="mt-3 mb-0">Safety score 0.517</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="crablox-section">
+        <h2 class="tag">How the models are built</h2>
+        <p class="sub">Every model follows the same five steps, so results can be repeated and checked.</p>
+        <ol class="steps">
+            <li><h3>Describe</h3><p>Turn each molecule into numbers: topological indices (Wiener, Zagreb, Balaban) plus physicochemical and ADMET descriptors.</p></li>
+            <li><h3>Split by scaffold</h3><p>Keep molecules with the same core together, so the test set holds structures the model has not seen.</p></li>
+            <li><h3>Train two models</h3><p>One Random Forest predicts Class D &beta;-lactamase activity. A second predicts liver toxicity.</p></li>
+            <li><h3>Check against chance</h3><p>Measure MCC and AUC-ROC, then retrain on shuffled labels to confirm the result is not luck.</p></li>
+            <li><h3>Rank</h3><p>Combine both scores into one priority score and list the top candidates.</p></li>
+        </ol>
+    </div>
+
+    <div class="crablox-section">
+        <h2 class="tag">What the study found</h2>
+        <p class="sub">CRABLOX screened 260 flavonoids from Philippine medicinal plants. The results point to a shortlist for lab testing.</p>
+        <div class="found">
+            <div class="crab-panel stat"><b>0.455</b><span>Activity model MCC, averaged over 20 scaffold-grouped tests (AUC-ROC 0.794)</span></div>
+            <div class="crab-panel stat"><b>0.26</b><span>Liver-toxicity model MCC (AUC-ROC 0.70)</span></div>
+            <div class="crab-panel stat v"><b>259 of 260</b><span>compounds sit outside the chemistry the activity model learned from</span></div>
+        </div>
+        <div class="crab-panel warn">
+            <p><strong>Read the shortlist as a starting point.</strong> No flavonoid scored above the 0.5 activity threshold, and the topological indices added no predictive value. Any candidate needs enzyme assays before it is called an inhibitor.</p>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+    var a = document.getElementById('crab-a');
+    var t = document.getElementById('crab-t');
+    if (!a || !t) return;
+    function update() {
+        var A = parseFloat(a.value), T = parseFloat(t.value);
+        var S = 1 - T, P = A * S;
+        document.getElementById('crab-av').textContent = A.toFixed(3);
+        document.getElementById('crab-tv').textContent = T.toFixed(3);
+        document.getElementById('crab-pv').textContent = P.toFixed(3);
+        document.getElementById('crab-sv').textContent = 'Safety score ' + S.toFixed(3);
+        document.getElementById('crab-pb').style.width = (P * 100) + '%';
+    }
+    a.addEventListener('input', update);
+    t.addEventListener('input', update);
+    update();
+})();
+</script>
 {% endblock %}

@@ -26,6 +26,7 @@ body {
 
 /* Redesign hero / footer logo are only shown by the CRABLOX theme */
 .crablox-hero,
+.crablox-sections,
 .footer-mark { display: none; }
 
 .card {
