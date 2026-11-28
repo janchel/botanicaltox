@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CRABLOX: screen plant compounds against a hospital superbug</title>
+<link rel="icon" type="image/webp" href="{{ url_for('static', filename='img/logo-crablox.webp') }}">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Hanken+Grotesk:wght@400;600;700&display=swap">
+<style>
+:root{--navy:#132847;--navy2:#1a3351;--teal:#296776;--violet:#55477c;--moss:#28624c;--gold:#e2c171;--mint:#6ff0e0;--ink:#eaf4f7;--mut:#a9bfcb;--r:18px;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+html{scroll-behavior:smooth;scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;color:var(--ink);font:400 1.0625rem/1.65 "Hanken Grotesk",system-ui,sans-serif;background-color:var(--navy);
+background-image:radial-gradient(60rem 36rem at 8% 0,rgba(41,103,118,.55),transparent 70%),radial-gradient(50rem 40rem at 100% 28%,rgba(85,71,124,.5),transparent 70%),radial-gradient(46rem 30rem at 0 78%,rgba(40,98,76,.4),transparent 70%),linear-gradient(180deg,#132847,#1a3351 55%,#162b4d)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:rgba(19,40,71,.92);z-index:10}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--gold);outline-offset:3px;border-radius:6px}
+.wrap{max-width:70rem;margin:0 auto;padding:0 1.25rem}
+h1,h2,h3{font-family:Unbounded,"Hanken Grotesk",sans-serif;line-height:1.2;margin:0}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rgba(19,40,71,.92);backdrop-filter:blur(10px);border-bottom:1.5px solid rgba(226,193,113,.4)}
+header .wrap{display:flex;align-items:center;gap:1.25rem;min-height:3.75rem}
+.brand{display:flex;align-items:center;gap:.6rem;text-decoration:none;font:700 1.05rem Unbounded,sans-serif;flex:none}
+.brand img{height:2.4rem;width:auto}
+nav{display:flex;gap:.25rem;margin-left:auto;overflow-x:auto;scrollbar-width:none;align-items:center}
+nav a{padding:.45rem .8rem;border-radius:999px;text-decoration:none;font-weight:600;font-size:.95rem;white-space:nowrap;color:var(--mut)}
+nav a:hover{color:var(--ink);background:rgba(111,240,224,.1)}
+nav a.login{border:1.5px solid var(--gold);color:var(--gold);margin-left:.4rem}
+nav a.login:hover{background:var(--gold);color:var(--navy)}
+.hero{position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;opacity:.09;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34zM28 66v34' fill='none' stroke='%236ff0e0'/%3E%3Cpath d='M28 0v0M28 34L0 50v34l28 16 28-16V50z' fill='none' stroke='%236ff0e0'/%3E%3C/svg%3E");-webkit-mask-image:linear-gradient(#000 40%,transparent);mask-image:linear-gradient(#000 40%,transparent)}
+.hero .wrap{position:relative;display:grid;grid-template-columns:1.15fr .85fr;gap:2.5rem;align-items:center;padding-top:3.5rem;padding-bottom:4rem}
+.word{width:min(100%,32rem);height:auto;display:block;margin-bottom:1.6rem}
+h1{font-size:clamp(1.55rem,3.4vw,2.35rem);font-weight:700;max-width:22ch}
+.lede{color:#cfe0e8;max-width:40rem;margin:1.1rem 0 1.6rem}
+.cta{display:flex;flex-wrap:wrap;gap:.8rem}
+.btn{display:inline-block;padding:.8rem 1.4rem;border-radius:14px;font:700 .95rem "Hanken Grotesk",sans-serif;text-decoration:none;border:1.5px solid var(--gold);transition:background .2s,color .2s}
+.btn.solid{background:var(--gold);color:var(--navy)}
+.btn.solid:hover{background:#f0d58e}
+.btn.line{color:var(--gold)}
+.btn.line:hover{background:rgba(226,193,113,.14)}
+.fact{margin-top:1.6rem;padding-left:1rem;border-left:3px solid var(--mint);color:var(--mut);font-size:.95rem;max-width:36rem}
+.shield{position:relative;display:grid;place-items:center}
+.shield::before{content:"";position:absolute;width:88%;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,rgba(111,240,224,.38),rgba(85,71,124,.28) 60%,transparent)}
+.shield img{position:relative;width:min(100%,24rem);height:auto}
+@media (prefers-reduced-motion:no-preference){.shield img{animation:rise 1.3s cubic-bezier(.2,.8,.2,1) both}.shield::before{animation:glow 2.2s ease-out both}}
+@keyframes rise{from{opacity:0;transform:translateY(1.2rem) scale(.94)}}
+@keyframes glow{from{opacity:0;transform:scale(.6)}}
+section{padding:3.5rem 0}
+.tag{display:inline-block;border:1.5px solid var(--gold);border-radius:14px;padding:.4rem 1.1rem;font:700 clamp(1.05rem,2.2vw,1.35rem) Unbounded,sans-serif;color:var(--gold);background:rgba(19,40,71,.55)}
+.sub{color:var(--mut);max-width:42rem;margin:.9rem 0 2rem}
+.panel{position:relative;border:1.5px solid var(--gold);border-radius:var(--r);padding:1.6rem;background:linear-gradient(155deg,var(--c1),var(--c2))}
+.panel::after{content:"";position:absolute;inset:5px;border:1px solid rgba(226,193,113,.28);border-radius:calc(var(--r) - 5px);pointer-events:none}
+.tools{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}
+.tool h3{font-size:1.2rem;color:var(--mint);display:flex;align-items:center;gap:.7rem;margin-bottom:.7rem}
+.tool h3 svg{width:2rem;height:2rem;flex:none;stroke:var(--mint);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tool p{margin:0 0 1rem;color:#dbe8ee}
+.chips{display:flex;flex-wrap:wrap;gap:.45rem;margin:0 0 1.2rem;padding:0;list-style:none}
+.chips li{font-size:.85rem;padding:.2rem .7rem;border-radius:999px;background:rgba(19,40,71,.55);border:1px solid rgba(111,240,224,.35)}
+.tool .btn{padding:.6rem 1.1rem}
+.t1{--c1:#296776;--c2:#1f4d66}.t2{--c1:#55477c;--c2:#3a3a6e}.t3{--c1:#28624c;--c2:#1f4d5a}.t4{--c1:#1a3351;--c2:#27406a}
+.note{margin-top:1.25rem;font-size:.92rem;color:var(--mut)}
+.calc{display:grid;grid-template-columns:1.1fr .9fr;gap:2rem;align-items:center}
+.calc .panel{--c1:#1a3351;--c2:#244069}
+label{display:block;font-weight:600;margin-bottom:.2rem}
+.row{margin-bottom:1.3rem}
+.row small{display:block;color:var(--mut);margin-top:.15rem}
+.rng{display:flex;align-items:center;gap:1rem}
+input[type=range]{flex:1;accent-color:var(--gold);height:2rem}
+output{font:700 1.05rem Unbounded,sans-serif;color:var(--mint);min-width:4.2rem;text-align:right}
+.res{text-align:center}
+.res .big{font:700 clamp(2.8rem,8vw,4.2rem) Unbounded,sans-serif;color:var(--mint);line-height:1}
+.res p{margin:.7rem 0 1rem;color:var(--mut)}
+.bar{height:.9rem;border-radius:999px;background:rgba(255,255,255,.12);overflow:hidden}
+.bar i{display:block;height:100%;width:22%;background:linear-gradient(90deg,var(--teal),var(--mint));border-radius:999px;transition:width .15s}
+.formula{font:600 .95rem Unbounded,sans-serif;margin-top:1rem;color:var(--ink)}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;counter-reset:s}
+.steps li{position:relative;border:1.5px solid rgba(226,193,113,.55);border-radius:var(--r);padding:3.1rem 1.1rem 1.2rem;background:rgba(26,51,81,.7);counter-increment:s}
+.steps li::before{content:counter(s);position:absolute;top:.9rem;left:1.1rem;width:1.8rem;height:1.8rem;border-radius:50%;background:var(--gold);color:var(--navy);font:700 .9rem/1.8rem Unbounded,sans-serif;text-align:center}
+.steps li+li::after{content:"";position:absolute;top:1.8rem;right:100%;width:1rem;border-top:2px dashed rgba(226,193,113,.6)}
+.steps h3{font-size:1rem;color:var(--mint);margin-bottom:.4rem}
+.steps p{margin:0;font-size:.92rem;color:#cfe0e8;line-height:1.5}
+.found{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem}
+.stat{--c1:#1a3351;--c2:#1f4d66}
+.stat b{display:block;font:700 1.9rem/1.15 Unbounded,sans-serif;color:var(--mint)}
+.stat span{display:block;margin-top:.5rem;color:#dbe8ee;font-size:.95rem}
+.stat.v{--c1:#3a3a6e;--c2:#55477c}
+.warn{margin-top:1.5rem;--c1:#2a3355;--c2:#55477c;display:flex;gap:1rem;align-items:flex-start}
+.warn strong{color:var(--gold)}
+.warn p{margin:0}
+footer{border-top:1.5px solid rgba(226,193,113,.4);padding:2.2rem 0 2.6rem;background:rgba(19,40,71,.7)}
+footer .wrap{display:flex;gap:1.4rem;align-items:center;flex-wrap:wrap}
+footer img{height:4.2rem;width:auto}
+footer p{margin:0;color:var(--mut);font-size:.92rem}
+footer strong{color:var(--ink)}
+@media (max-width:860px){
+.hero .wrap{grid-template-columns:1fr;padding-top:2.2rem}
+.shield{order:-1}.shield img{width:min(62%,15rem)}
+.tools,.found,.calc{grid-template-columns:1fr}
+.steps{grid-template-columns:1fr}
+.steps li{padding:1rem 1rem 1rem 3.6rem}
+.steps li::before{top:1rem}
+.steps li+li::after{display:none}
+}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<a class="brand" href="#top"><img src="{{ url_for('static', filename='img/logo-crablox.webp') }}" alt="">CRABLOX</a>
+<nav aria-label="Main">
+<a href="{{ url_for('train') }}">Train</a><a href="{{ url_for('predict') }}">Predict</a><a href="{{ url_for('plant') }}">Plant</a><a href="{{ url_for('ranking') }}">Rank</a><a href="{{ url_for('team') }}">Team</a>{% if current_user.is_authenticated %}<a href="{{ url_for('settings') }}">Settings</a><a class="login" href="{{ url_for('logout') }}">Log out</a>{% else %}<a href="{{ url_for('register') }}">Register</a><a class="login" href="{{ url_for('login') }}">Log in</a>{% endif %}
+</nav></div></header>
+
+<main id="top">
+<div class="hero"><div class="wrap">
+<div>
+<img class="word" src="{{ url_for('static', filename='img/wordmark-crablox.webp') }}" alt="CRABLOX">
+<h1>Screen plant compounds against a hospital superbug</h1>
+<p class="lede">CRABLOX trains machine-learning models on molecule data. It predicts which compounds may block the enzymes that make carbapenem-resistant <i>Acinetobacter baumannii</i> (CRAB) resistant, flags likely liver toxicity, and ranks what to test in the lab first.</p>
+<div class="cta"><a class="btn solid" href="{{ url_for('predict') }}">Predict compounds</a><a class="btn line" href="{{ url_for('train') }}">Train a model</a></div>
+<p class="fact">CRAB is on the WHO’s Priority 1: Critical list. Up to 56% of Philippine <i>A. baumannii</i> isolates resist carbapenems.</p>
+</div>
+<div class="shield"><img src="{{ url_for('static', filename='img/shield-crablox.webp') }}" alt="CRABLOX logo: a circuit-board shield cracked open around a benzene ring"></div>
+</div></div>
+
+<section id="tools"><div class="wrap">
+<h2 class="tag">What you can do</h2>
+<p class="sub">Four tools share one pipeline. Start with a plant or a file of molecules.</p>
+<div class="tools">
+<article class="panel tool t1"><h3><svg viewBox="0 0 32 32"><path d="M5 27V5M5 27h22M9 21l6-7 5 4 7-10"/></svg>Train a model</h3>
+<p>Upload a CSV or Excel file of SMILES and labels. CRABLOX extracts 221 molecular descriptors, trains a Random Forest, and shows ROC curves and confusion matrices.</p>
+<ul class="chips"><li>Activity or toxicity</li><li>ROC curves</li><li>Confusion matrix</li></ul>
+<a class="btn line" href="{{ url_for('train') }}">Train a model</a></article>
+<article class="panel tool t2"><h3><svg viewBox="0 0 32 32"><path d="M16 3l11 6.5v13L16 29 5 22.5v-13z"/><path d="M16 11v10M11 14l5-3 5 3"/></svg>Predict compounds</h3>
+<p>Upload new SMILES and get activity and toxicity scores from your trained models. Download the results as a CSV.</p>
+<ul class="chips"><li>SMILES auto-detection</li><li>Activity and toxicity scores</li><li>CSV download</li></ul>
+<a class="btn line" href="{{ url_for('predict') }}">Predict compounds</a></article>
+<article class="panel tool t3"><h3><svg viewBox="0 0 32 32"><path d="M6 26C6 14 14 6 27 5c1 13-7 21-19 21zM6 26l12-12"/></svg>Search by plant</h3>
+<p>Type a plant name, or add a photo. CRABLOX looks up its known compounds in the built-in database and scores each one.</p>
+<ul class="chips"><li>Photo upload</li><li>Built-in compound database</li><li>Automatic SMILES</li></ul>
+<a class="btn line" href="{{ url_for('plant') }}">Search by plant</a></article>
+<article class="panel tool t4"><h3><svg viewBox="0 0 32 32"><path d="M4 27h24M7 27V17h5v10M13.5 27V7h5v20M20 27V13h5v14"/></svg>Rank compounds</h3>
+<p>Score every compound by activity and safety together, then see the top 15. Download the ranking as a CSV.</p>
+<ul class="chips"><li>Selectable formulas</li><li>Top 15 view</li><li>Ranking CSV</li></ul>
+<a class="btn line" href="{{ url_for('ranking') }}">Rank compounds</a></article>
+</div>
+<p class="note">Scores come from models trained on a small set of known inhibitors. Treat them as a way to order compounds, not as measured activity or safety.</p>
+</div></section>
+
+<section id="score"><div class="wrap">
+<h2 class="tag">How a compound is ranked</h2>
+<p class="sub">A compound needs a high activity score and a low toxicity score. Move the sliders to see the priority change.</p>
+<div class="calc">
+<div>
+<div class="row"><div class="rng"><label for="a" style="margin:0;flex:1">Activity score</label><output id="av" for="a">0.433</output></div><input id="a" type="range" min="0" max="1" step="0.001" value="0.433"><small>Chance the model gives that the compound blocks Class D β-lactamases.</small></div>
+<div class="row"><div class="rng"><label for="t" style="margin:0;flex:1">Toxicity score</label><output id="tv" for="t">0.483</output></div><input id="t" type="range" min="0" max="1" step="0.001" value="0.483"><small>Chance the model gives that the compound is toxic to the liver.</small></div>
+<p class="note" style="margin:0">Starting values are the top-ranked compound in the study (PubChem CID 445881).</p>
+</div>
+<div class="panel res"><div class="big" id="pv" aria-live="polite">0.224</div>
+<p>Priority score</p><div class="bar"><i id="pb"></i></div>
+<div class="formula">Safety = 1 − Toxicity<br>Priority = Activity × Safety</div>
+<p id="sv" style="margin-top:.8rem">Safety score 0.517</p></div>
+</div></div></section>
+
+<section id="pipeline"><div class="wrap">
+<h2 class="tag">How the models are built</h2>
+<p class="sub">Every model follows the same five steps, so results can be repeated and checked.</p>
+<ol class="steps">
+<li><h3>Describe</h3><p>Turn each molecule into numbers: topological indices (Wiener, Zagreb, Balaban) plus physicochemical and ADMET descriptors.</p></li>
+<li><h3>Split by scaffold</h3><p>Keep molecules with the same core together, so the test set holds structures the model has not seen.</p></li>
+<li><h3>Train two models</h3><p>One Random Forest predicts Class D β-lactamase activity. A second predicts liver toxicity.</p></li>
+<li><h3>Check against chance</h3><p>Measure MCC and AUC-ROC, then retrain on shuffled labels to confirm the result is not luck.</p></li>
+<li><h3>Rank</h3><p>Combine both scores into one priority score and list the top candidates.</p></li>
+</ol>
+</div></section>
+
+<section id="findings"><div class="wrap">
+<h2 class="tag">What the study found</h2>
+<p class="sub">CRABLOX screened 260 flavonoids from Philippine medicinal plants. The results point to a shortlist for lab testing.</p>
+<div class="found">
+<div class="panel stat"><b>0.455</b><span>Activity model MCC, averaged over 20 scaffold-grouped tests (AUC-ROC 0.794)</span></div>
+<div class="panel stat"><b>0.26</b><span>Liver-toxicity model MCC (AUC-ROC 0.70)</span></div>
+<div class="panel stat v"><b>259 of 260</b><span>compounds sit outside the chemistry the activity model learned from</span></div>
+</div>
+<div class="panel warn"><p><strong>Read the shortlist as a starting point.</strong> No flavonoid scored above the 0.5 activity threshold, and the topological indices added no predictive value. Any candidate needs enzyme assays before it is called an inhibitor.</p></div>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+<img src="{{ url_for('static', filename='img/logo-crablox.webp') }}" alt="">
+<p><strong>CRABLOX © 2026</strong> · Science and Technology Education Center · Division of Lapu-Lapu City · Batch of 2027<br>Research coach: Rena Mae M. Quimat. All rights reserved.</p>
+</div></footer>
+
+<script>
+(function(){
+var a=document.getElementById("a"),t=document.getElementById("t");
+function up(){var A=+a.value,T=+t.value,S=1-T,P=A*S;
+document.getElementById("av").textContent=A.toFixed(3);
+document.getElementById("tv").textContent=T.toFixed(3);
+document.getElementById("pv").textContent=P.toFixed(3);
+document.getElementById("sv").textContent="Safety score "+S.toFixed(3);
+document.getElementById("pb").style.width=(P*100)+"%";}
+a.addEventListener("input",up);t.addEventListener("input",up);up();
+})();
+</script>
+</body>
+</html>

@@ -747,8 +747,12 @@ def sniff_image_mime(data: bytes, declared: str | None = None) -> str:
 
 @app.route("/")
 def index():
-    """Landing page — public. No login required to view."""
-    return render_template("index.html")
+    """Landing page — public. No login required to view.
+
+    The page is a standalone rebuild of the CRABLOX website redesign and
+    links out to the four tools; those routes prompt for login themselves.
+    """
+    return render_template("landing.html")
 
 
 # ── TRAIN ROUTE ─────────────────────────────────────────────────────────────
