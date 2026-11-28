@@ -14,8 +14,8 @@
          Logged-in users get their saved theme rendered server-side
          (no flash of wrong theme); visitors fall back to localStorage. -->
     {% set initial = current_user.theme if current_user.is_authenticated and current_user.theme in ('botanical', 'mintjulep', 'clinical', 'crablox') else 'crablox' %}
-    <link id="theme-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/theme-' ~ initial ~ '.css') }}?v=20260828b">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=20260828b">
+    <link id="theme-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/theme-' ~ initial ~ '.css') }}?v=20260828d">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=20260828d">
 </head>
 <body{% if initial in ('clinical', 'crablox') %} class="theme-{{ initial }}"{% endif %}>
     <nav class="navbar navbar-dark">
@@ -129,7 +129,7 @@
 
             function applyTheme(theme) {
                 if (!['botanical', 'mintjulep', 'clinical', 'crablox'].includes(theme)) theme = 'crablox';
-                link.setAttribute('href', '{{ url_for("static", filename="css/") }}theme-' + theme + '.css?v=20260828b');
+                link.setAttribute('href', '{{ url_for("static", filename="css/") }}theme-' + theme + '.css?v=20260828d');
                 localStorage.setItem(THEME_KEY, theme);
                 options.forEach(function(opt) {
                     opt.classList.toggle('active', opt.dataset.theme === theme);

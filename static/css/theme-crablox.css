@@ -62,7 +62,72 @@ body.theme-crablox {
         radial-gradient(46rem 30rem at 0 78%, rgba(40, 98, 76, .4), transparent 70%),
         linear-gradient(180deg, #132847, #1a3351 55%, #162b4d);
     background-attachment: fixed;
+
+    /* Bootstrap 5 component colors — without these, cards/tables/modals
+       inherit Bootstrap's dark #212529 text and disappear on this navy bg. */
+    --bs-body-color: var(--ink);
+    --bs-body-bg: var(--navy);
+    --bs-secondary-color: var(--mut);
+    --bs-tertiary-color: rgba(234, 244, 247, .72);
+    --bs-emphasis-color: #ffffff;
+    --bs-heading-color: var(--ink);
+    --bs-link-color: var(--mint);
+    --bs-link-color-rgb: 111, 240, 224;
+    --bs-link-hover-color: var(--gold);
+    --bs-link-hover-color-rgb: 226, 193, 113;
+    --bs-card-color: var(--ink);
+    --bs-card-cap-color: var(--gold);
+    --bs-modal-color: var(--ink);
+    --bs-modal-bg: var(--navy2);
+    --bs-dropdown-color: var(--ink);
+    --bs-dropdown-link-color: var(--ink);
+    --bs-dropdown-link-hover-color: var(--ink);
+    --bs-list-group-color: var(--ink);
+    --bs-list-group-bg: transparent;
+    --bs-breadcrumb-divider-color: var(--mut);
+    --bs-breadcrumb-item-active-color: var(--mut);
+    --bs-nav-link-color: var(--mut);
+    --bs-nav-link-hover-color: var(--ink);
+    --bs-accordion-color: var(--ink);
+    --bs-accordion-bg: var(--navy2);
+    --bs-accordion-button-color: var(--ink);
+    --bs-accordion-button-bg: var(--navy2);
+    --bs-accordion-active-color: var(--gold);
+    --bs-accordion-active-bg: #162b4d;
 }
+
+/* Components that don't read the variables above (or are overridden by
+   Bootstrap's own dark defaults) get explicit light foregrounds. */
+body.theme-crablox .card,
+body.theme-crablox .card-title,
+body.theme-crablox .card-text,
+body.theme-crablox .list-group-item,
+body.theme-crablox .accordion-button,
+body.theme-crablox .accordion-body,
+body.theme-crablox .breadcrumb,
+body.theme-crablox .nav-tabs .nav-link,
+body.theme-crablox .nav-pills .nav-link,
+body.theme-crablox .input-group-text,
+body.theme-crablox .form-check-label {
+    color: var(--ink);
+}
+body.theme-crablox .text-muted,
+body.theme-crablox .text-secondary { color: var(--mut) !important; }
+body.theme-crablox .text-dark,
+body.theme-crablox .text-black,
+body.theme-crablox .text-body { color: var(--ink) !important; }
+body.theme-crablox .text-success { color: #8fe3bd !important; }
+body.theme-crablox .text-danger { color: #f0a79d !important; }
+body.theme-crablox .text-warning { color: var(--gold) !important; }
+body.theme-crablox .text-info { color: var(--mint) !important; }
+body.theme-crablox .text-primary { color: #f0d58e !important; }
+body.theme-crablox .text-light { color: #ffffff !important; }
+body.theme-crablox .breadcrumb-item.active { color: var(--mut); }
+body.theme-crablox .input-group-text {
+    background: #162b4d;
+    border: 1.5px solid rgba(226, 193, 113, .35);
+}
+body.theme-crablox .btn-close { filter: invert(1) grayscale(1) brightness(1.6); }
 
 body.theme-crablox h1,
 body.theme-crablox h2,
