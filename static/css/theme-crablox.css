@@ -145,13 +145,14 @@ body.theme-crablox .navbar {
     box-shadow: none;
 }
 body.theme-crablox .navbar-brand {
-    color: var(--gold) !important;
+    color: #ffffff !important;
     font-size: 1.05rem;
     letter-spacing: .3px;
     display: flex;
     align-items: center;
     gap: .55rem;
 }
+body.theme-crablox .navbar-brand:hover { color: var(--gold-soft) !important; }
 body.theme-crablox #logo-mark {
     display: inline-block;
     height: 2.1rem;
