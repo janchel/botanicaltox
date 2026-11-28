@@ -83,6 +83,21 @@
                         <div class="form-text">Give your model a name so you can select it later during prediction. Each name creates a separate saved model.</div>
                     </div>
 
+                    <!-- Append to Existing Model -->
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="appendSwitch" name="append">
+                            <label class="form-check-label fw-semibold" for="appendSwitch">
+                                Add to an existing model
+                            </label>
+                        </div>
+                        <div class="form-text">
+                            Uses the training compounds already stored for this model name, skips uploaded rows
+                            that already exist (and lists them), then retrains on the combined data instead of
+                            overwriting. Requires a model trained with append/duplicate tracking.
+                        </div>
+                    </div>
+
                     <!-- Hyperparameter Tuning -->
                     <div class="mb-4">
                         <div class="form-check form-switch">

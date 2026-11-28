@@ -11,6 +11,7 @@ Built by **The Science and Technology Education Center (STEC) — Batch of 2027*
 ## ✨ Features
 
 - **Train ML models** — upload CSV/Excel with SMILES + labels, train Random Forest classifiers, view metrics, ROC curves, confusion matrices, and feature importance.
+- **Add data to an existing model** — append newly uploaded compounds to a previously trained model; already-known compounds are detected and listed, then the model is retrained on the combined set.
 - **Export test results** — after training, download the held-out **test-set predictions** and a one-row **metrics summary** as CSV (mirrors the students' Colab notebook 1.6a/2.6a).
 - **Predict compounds** — upload SMILES and get instant activity & toxicity predictions (downloadable as CSV).
 - **Plant search** — enter a plant name; the app looks up its known compounds in the built-in plant database (offline, no API key) and predicts their properties.

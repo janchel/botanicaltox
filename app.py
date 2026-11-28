@@ -367,6 +367,93 @@ def canonicalize_smiles(smi: str) -> str | None:
         return None
 
 
+# ── Training-data manifests (for appending to existing models) ─────────────
+# Each trained model gets a sidecar JSON listing the exact compounds used to
+# train it. Without this, an uploaded CSV cannot be checked against what the
+# existing model already knows.
+
+MANIFEST_VERSION = 1
+
+
+def manifest_path(task_key: str, model_name: str) -> Path:
+    return app.config["MODEL_FOLDER"] / f"{task_key}_{model_name}.train.json"
+
+
+def load_training_manifest(task_key: str, model_name: str) -> dict | None:
+    """Return the stored training manifest for a model, or None."""
+    p = manifest_path(task_key, model_name)
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text())
+    except Exception:
+        return None
+    if not isinstance(data, dict) or data.get("version") != MANIFEST_VERSION:
+        return None
+    if not isinstance(data.get("records"), list):
+        return None
+    return data
+
+
+def save_training_manifest(task_key: str, model_name: str, label_col: str, records: list) -> Path:
+    """Persist the compound records a model was trained on."""
+    p = manifest_path(task_key, model_name)
+    payload = {
+        "version": MANIFEST_VERSION,
+        "task": task_key,
+        "model_name": model_name,
+        "label_col": label_col,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "n_rows": len(records),
+        "records": records,
+    }
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, separators=(",", ":")))
+    tmp.replace(p)
+    return p
+
+
+def build_training_records(
+    frame: pd.DataFrame,
+    smiles_col: str,
+    label_col: str,
+    canon_list: list | None = None,
+) -> list:
+    """Build manifest records for the valid rows of a training frame."""
+    labels = pd.to_numeric(frame[label_col], errors="coerce").tolist()
+    smiles = frame[smiles_col].astype(str).tolist()
+    ids = (
+        frame["Compound_ID"].astype(str).tolist()
+        if "Compound_ID" in frame.columns
+        else [""] * len(frame)
+    )
+    if canon_list is None:
+        canon_list = [canonicalize_smiles(s) for s in smiles]
+    records = []
+    for sid, smi, lab, canon in zip(ids, smiles, labels, canon_list):
+        if canon is None or pd.isna(lab):
+            continue
+        records.append({
+            "id": sid or "",
+            "smiles": smi,
+            "canon": canon,
+            "label": int(lab),
+        })
+    return records
+
+
+def describe_compounds(frame: pd.DataFrame, smiles_col: str, indices, limit: int = 8) -> str:
+    """Short human-readable identity list for notifications."""
+    parts = []
+    for i in list(indices)[:limit]:
+        smi = str(frame.at[i, smiles_col])[:28] if smiles_col in frame.columns else ""
+        rid = str(frame.at[i, "Compound_ID"]) if "Compound_ID" in frame.columns else ""
+        parts.append(f"{rid or 'row'} ({smi})")
+    extra = len(list(indices)) - len(parts)
+    suffix = f", … {extra} more" if extra > 0 else ""
+    return ", ".join(parts) + suffix
+
+
 def dedup_by_canonical_smiles(df: pd.DataFrame, smiles_col: str, keep: str = "first") -> tuple[pd.DataFrame, int]:
     """Deduplicate rows whose SMILES are structurally identical.
 
@@ -787,6 +874,7 @@ def train():
         return redirect(url_for("train"))
 
     tune = request.form.get("tune") == "on"
+    append_to_existing = request.form.get("append") == "on"
 
     sess_dir = get_session_dir()
     filename = secure_filename(file.filename)
@@ -842,6 +930,7 @@ def train():
         train_toxicity=train_toxicity,
         custom_task_name=custom_task_name,
         tune=tune,
+        append_to_existing=append_to_existing,
         model_name=model_name,
         act_label=act_label,
         tox_label=tox_label,
@@ -855,6 +944,7 @@ def train():
 def run_training_job(
     job_id, sess_dir, upload_path, filename, train_activity, train_toxicity,
     custom_task_name, tune, model_name, act_label, tox_label, username,
+    append_to_existing=False,
 ):
     """
     Heavy training work, run in a background thread. Writes progress + the final
@@ -933,6 +1023,165 @@ def run_training_job(
                     "info",
                 )
 
+        # Keep a contiguous index so positional duplicate bookkeeping and
+        # manifest extraction stay aligned with the frame.
+        df = df.reset_index(drop=True)
+
+        # ── Append-to-existing-model preparation ────────────────────────────
+        append_mode = bool(append_to_existing)
+        append_notes = []
+        external_act_label = act_label
+        external_tox_label = tox_label
+
+        if append_mode:
+            requested_tasks = []
+            if train_activity:
+                requested_tasks.append(("activity", act_label))
+            if train_toxicity:
+                requested_tasks.append(("toxicity", tox_label))
+
+            manifests = {}
+            legacy_models = []
+            for task_key, _ext in requested_tasks:
+                manifest = load_training_manifest(task_key, model_name)
+                manifests[task_key] = manifest
+                pkl_path = app.config["MODEL_FOLDER"] / f"{task_key}_{model_name}.pkl"
+                if manifest is None and pkl_path.exists():
+                    legacy_models.append(task_key)
+
+            if legacy_models:
+                msg(
+                    f"⚠️ The existing '{model_name}' model(s) for "
+                    f"{', '.join(sorted(legacy_models))} were trained before training-data "
+                    "tracking existed, so duplicates cannot be verified safely. Train the "
+                    "model normally once (same name) to enable appending.",
+                    "error",
+                )
+                _write_job(job_id, sess_dir=sess_dir, status="error",
+                           stage="Cannot verify duplicates", messages=list(messages))
+                return
+
+            if not any(m is not None for m in manifests.values()):
+                msg(
+                    f"⚠️ No existing trained model named '{model_name}' was found to add data to. "
+                    "Use a new model name, or train the model first.",
+                    "error",
+                )
+                _write_job(job_id, sess_dir=sess_dir, status="error",
+                           stage="Model not found", messages=list(messages))
+                return
+
+            internal_by_task = {"activity": "Activity_Label", "toxicity": "Toxicity_Label"}
+            canon_series = df[smiles_col].map(canonicalize_smiles)
+            dup_by_task: dict[str, np.ndarray] = {}
+
+            for task_key, ext_label in requested_tasks:
+                internal = internal_by_task[task_key]
+                vals = (
+                    pd.to_numeric(df[ext_label], errors="coerce")
+                    if ext_label in df.columns
+                    else pd.Series(np.nan, index=df.index)
+                )
+                manifest = manifests.get(task_key)
+                if manifest is None:
+                    df[internal] = vals
+                    msg(
+                        f"ℹ️ No existing '{task_key}' model found under '{model_name}' — this "
+                        "task will be trained on the uploaded rows only.",
+                        "info",
+                    )
+                    continue
+
+                old_canons = {r.get("canon") for r in manifest["records"] if r.get("canon")}
+                dup_mask = canon_series.isin(old_canons).fillna(False).to_numpy()
+                dup_by_task[task_key] = dup_mask
+                df[internal] = vals.where(~pd.Series(dup_mask, index=df.index))
+                n_dup = int(dup_mask.sum())
+                if n_dup:
+                    listing = describe_compounds(df, smiles_col, np.flatnonzero(dup_mask))
+                    note = (f"{n_dup} uploaded row(s) already exist in the existing "
+                            f"'{task_key}' model — skipped: {listing}")
+                    msg(f"⚠️ {note}", "error")
+                    append_notes.append(note)
+
+            # A row only becomes fully redundant when EVERY selected task that has
+            # an existing model already knows it.
+            all_dup = np.ones(len(df), dtype=bool)
+            for task_key, _ext in requested_tasks:
+                if task_key in dup_by_task:
+                    all_dup &= dup_by_task[task_key]
+                else:
+                    all_dup &= False
+            if all_dup.any():
+                n_all = int(all_dup.sum())
+                msg(
+                    f"ℹ️ {n_all} uploaded row(s) are duplicates of every selected existing "
+                    "model and were dropped.",
+                    "info",
+                )
+                append_notes.append(f"Dropped {n_all} row(s) duplicated across all selected models.")
+                df = df[~all_dup].reset_index(drop=True)
+
+            n_new_rows = len(df)
+
+            # Merge the compounds the existing models were trained on. The
+            # same structure used by several tasks becomes ONE row carrying
+            # both labels, so the combined dataset isn't double-counted.
+            old_rows: dict[str, dict] = {}
+            old_order: list[str] = []
+            for task_key, _ext in requested_tasks:
+                manifest = manifests.get(task_key)
+                if not manifest:
+                    continue
+                internal = internal_by_task[task_key]
+                for r in manifest["records"]:
+                    canon = r.get("canon")
+                    if not canon:
+                        continue
+                    if canon not in old_rows:
+                        old_rows[canon] = {
+                            "Compound_ID": r.get("id", ""),
+                            smiles_col: r.get("smiles", ""),
+                            "Activity_Label": np.nan,
+                            "Toxicity_Label": np.nan,
+                        }
+                        old_order.append(canon)
+                    old_rows[canon][internal] = int(r["label"])
+                msg(
+                    f"ℹ️ Loaded {len(manifest['records']):,} compound(s) previously "
+                    f"used by the '{task_key}' model.",
+                    "info",
+                )
+
+            if old_order:
+                old_df = pd.DataFrame([old_rows[c] for c in old_order])
+                df = pd.concat([old_df, df], ignore_index=True)
+
+            # Drop original custom label columns; tasks now use standard names.
+            external_cols = [
+                c for _t, c in requested_tasks
+                if c not in ("Activity_Label", "Toxicity_Label")
+            ]
+            df = df.drop(columns=[c for c in external_cols if c in df.columns])
+
+            if train_activity:
+                act_label = "Activity_Label"
+            if train_toxicity:
+                tox_label = "Toxicity_Label"
+
+            if n_new_rows == 0:
+                msg("All uploaded compounds already exist in the selected model(s) — nothing to add.", "info")
+                result_ctx = dict(
+                    tasks=[], task_labels=[], all_metrics={}, all_graphs={},
+                    all_best_params=None, n_samples=0, n_features=0, tune=tune,
+                    model_name=model_name, dataset_preview=[], dataset_columns=[],
+                    overwritten=False, export_files={}, append_notes=append_notes,
+                    append=True,
+                )
+                _write_job(job_id, sess_dir=sess_dir, status="done", stage="Done",
+                           messages=list(messages), result=_coerce_context(result_ctx))
+                return
+
         msg("Parsing molecules and computing RDKit descriptors…")
         batch_size = int(os.environ.get("CRABLOX_DESC_BATCH_SIZE", "1000"))
 
@@ -1002,9 +1251,10 @@ def run_training_job(
             n_missing = int(y_raw.isna().sum())
             n_nonnum = int((y_num.isna() & y_raw.notna()).sum())
             if n_missing or n_nonnum:
+                action = "ignored for this task" if append_mode else "dropped before training"
                 msg(
                     f"⚠️ '{display_name}': {n_missing} missing and {n_nonnum} non-numeric "
-                    "label value(s) — these rows will be dropped before training.",
+                    f"label value(s) — these rows will be {action}.",
                     "error",
                 )
             y_vals = y_num.dropna()
@@ -1049,8 +1299,10 @@ def run_training_job(
             return
 
         # Drop rows with missing/invalid labels for any selected task BEFORE
-        # training, keeping df / feats / scaffold groups aligned.
-        if not bool(label_valid.all()):
+        # training, keeping df / feats / scaffold groups aligned. In append mode
+        # each task keeps its own rows (old records lack the other label), so
+        # filtering happens per task inside the training loop instead.
+        if (not append_mode) and not bool(label_valid.all()):
             n_dropped = int((~label_valid).sum())
             msg(
                 f"Dropped {n_dropped} row(s) with missing or invalid labels "
@@ -1062,6 +1314,10 @@ def run_training_job(
             feats = feats[mask].reset_index(drop=True)
             if scaffold_groups is not None:
                 scaffold_groups = scaffold_groups[mask].reset_index(drop=True)
+
+        # Canonical SMILES aligned with the FINAL frame (after any row drops) —
+        # used to write the training-data manifests after each task is trained.
+        canon_final = [canonicalize_smiles(s) for s in df[smiles_col].tolist()]
 
         all_metrics = {}
         all_graphs = {}
@@ -1075,9 +1331,21 @@ def run_training_job(
             # Reuse the in-memory frame: no need to re-read features.csv and
             # clean it a second time for each task.
             X, y = split_features_and_label(feats, label_col)
+            # In append mode old records may lack this task's label; keep only
+            # rows usable for the task being trained and align scaffold groups.
+            task_ok = y.notna()
+            if not bool(task_ok.all()):
+                X = X[task_ok]
+                y = y[task_ok]
+                groups_task = (
+                    scaffold_groups.loc[X.index] if scaffold_groups is not None else None
+                )
+            else:
+                groups_task = scaffold_groups
+
             model, best_params, splits = train_random_forest(
                 X, y, random_state=42, tune=tune,
-                groups=scaffold_groups, task=task_key,
+                groups=groups_task, task=task_key,
             )
             X_train, X_test, y_train, y_test = splits
 
@@ -1185,6 +1453,25 @@ def run_training_job(
             save_model_with_metadata(model, str(shared_path), descriptor_cols, impute_medians)
             save_model_owner(model_name, username)
 
+            # Persist exactly what this model trained on so future uploads can
+            # be checked for duplicates (append mode).
+            internal_label = "Activity_Label" if task_key == "activity" else "Toxicity_Label"
+            external_label = (
+                external_act_label if task_key == "activity" else external_tox_label
+            )
+            manifest_records = build_training_records(
+                df, smiles_col, internal_label, canon_final
+            )
+            try:
+                save_training_manifest(task_key, model_name, external_label, manifest_records)
+                msg(
+                    f"Stored {len(manifest_records):,} training compound(s) for "
+                    f"'{task_key}' append tracking.",
+                    "info",
+                )
+            except Exception as e:
+                msg(f"⚠️ Could not save the training manifest for '{task_key}': {e}", "error")
+
             if tune and best_params:
                 all_best_params[task_key] = best_params
 
@@ -1210,6 +1497,8 @@ def run_training_job(
             dataset_columns=dataset_columns,
             overwritten=overwritten,
             export_files=export_files,
+            append_notes=append_notes,
+            append=append_mode,
         )
         # session_id is filled at render time from the polling request's cookie
         _write_job(

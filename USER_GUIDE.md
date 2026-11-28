@@ -152,6 +152,14 @@ BEFORE YOU START — The Workflow
     7. Optional: Enable "Hyperparameter Tuning" for better accuracy.
     8. Click "Train Model"
 
+    ➕ ADDING DATA TO AN EXISTING MODEL:
+      Tick "Add to an existing model" when the Model/Dataset Name matches a model
+      you already trained. CRABLOX reads the compounds stored with that model,
+      skips uploaded rows that already exist (and lists exactly which ones), then
+      retrains the model on the combined old + new data instead of overwriting it.
+      Models trained before this feature have no stored training compounds, so
+      appending to them is refused until you train them normally once.
+
     ⚠️  USING AN EXISTING NAME will overwrite the previous model.
     ⚠️  DUPLICATE SMILES are detected and handled:
         - Same SMILES, same label → first copy kept, rest dropped.

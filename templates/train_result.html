@@ -14,7 +14,19 @@
 {% if overwritten %}
 <div class="alert alert-warning py-2 mb-3">
     <i class="bi bi-exclamation-triangle"></i>
-    <strong>"{{ model_name | replace('_', ' ') | title }}" was overwritten.</strong>
+    {% if append %}
+        <strong>"{{ model_name | replace('_', ' ') | title }}" was updated with the new, non-duplicate compounds.</strong>
+    {% else %}
+        <strong>"{{ model_name | replace('_', ' ') | title }}" was overwritten.</strong>
+    {% endif %}
+</div>
+{% endif %}
+{% if append_notes %}
+<div class="alert alert-info py-2 mb-3">
+    <strong><i class="bi bi-layers"></i> Add-to-existing summary</strong>
+    <ul class="mb-0 ps-3 mt-1">
+        {% for note in append_notes %}<li class="small">{{ note }}</li>{% endfor %}
+    </ul>
 </div>
 {% endif %}
 <p class="text-muted">
