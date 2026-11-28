@@ -113,7 +113,9 @@ body.theme-crablox .form-check-label {
 }
 body.theme-crablox .text-muted,
 body.theme-crablox .text-secondary { color: var(--mut) !important; }
-body.theme-crablox .text-dark,
+/* `.text-dark` is deliberately used on LIGHT badges in the markup
+   (bg-light / bg-warning / bg-info), so it must remain dark there. */
+body.theme-crablox .text-dark { color: #212529 !important; }
 body.theme-crablox .text-black,
 body.theme-crablox .text-body { color: var(--ink) !important; }
 body.theme-crablox .text-success { color: #8fe3bd !important; }
