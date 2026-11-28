@@ -1,0 +1,372 @@
+/* ============================================================
+   Theme: CRABLOX Rebrand — navy / gold / mint
+   Palette, typography and logo adapted from
+   "CRABLOX website redesign.html".
+   ============================================================ */
+
+:root {
+    --navy: #132847;
+    --navy2: #1a3351;
+    --teal: #296776;
+    --violet: #55477c;
+    --moss: #28624c;
+    --gold: #e2c171;
+    --gold-soft: #f0d58e;
+    --mint: #6ff0e0;
+    --ink: #eaf4f7;
+    --mut: #a9bfcb;
+
+    --primary: var(--gold);
+    --primary-dark: #c9a85c;
+    --secondary: var(--teal);
+    --secondary-dark: #1f4d5a;
+    --success: #4fae8f;
+    --danger: #b0576b;
+    --warning: var(--gold);
+    --info: var(--teal);
+
+    --bg: var(--navy);
+    --card-bg: var(--navy2);
+    --text: var(--ink);
+    --text-muted: var(--mut);
+    --border: rgba(226, 193, 113, .45);
+    --metric-bg: #1f3a5c;
+    --upload-bg: #162b4d;
+    --upload-hover-bg: #1f3a5c;
+
+    --badge-active-bg: rgba(111, 240, 224, .16);
+    --badge-active-text: var(--mint);
+    --badge-inactive-bg: rgba(169, 191, 203, .14);
+    --badge-inactive-text: var(--mut);
+    --badge-toxic-bg: rgba(224, 138, 122, .16);
+    --badge-toxic-text: #eda495;
+    --badge-safe-bg: rgba(111, 240, 224, .14);
+    --badge-safe-text: var(--mint);
+
+    --stat-activity: linear-gradient(135deg, #296776, #1f4d66);
+    --stat-toxicity: linear-gradient(135deg, #55477c, #3a3a6e);
+    --stat-safe: linear-gradient(135deg, #28624c, #1f4d5a);
+    --stat-priority: linear-gradient(135deg, #1a3351, #27406a);
+}
+
+/* --- Base canvas ------------------------------------------------- */
+body.theme-crablox {
+    color-scheme: dark;
+    font-family: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    background-color: var(--navy);
+    background-image:
+        radial-gradient(60rem 36rem at 8% 0, rgba(41, 103, 118, .55), transparent 70%),
+        radial-gradient(50rem 40rem at 100% 28%, rgba(85, 71, 124, .5), transparent 70%),
+        radial-gradient(46rem 30rem at 0 78%, rgba(40, 98, 76, .4), transparent 70%),
+        linear-gradient(180deg, #132847, #1a3351 55%, #162b4d);
+    background-attachment: fixed;
+}
+
+body.theme-crablox h1,
+body.theme-crablox h2,
+body.theme-crablox h3,
+body.theme-crablox .navbar-brand {
+    font-family: 'Unbounded', 'Hanken Grotesk', system-ui, sans-serif;
+    line-height: 1.25;
+}
+
+/* --- Navbar ------------------------------------------------------ */
+body.theme-crablox .navbar {
+    background: rgba(19, 40, 71, .92) !important;
+    backdrop-filter: blur(10px);
+    border-bottom: 1.5px solid rgba(226, 193, 113, .4);
+    box-shadow: none;
+}
+body.theme-crablox .navbar-brand {
+    color: var(--gold) !important;
+    font-size: 1.05rem;
+    letter-spacing: .3px;
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+}
+body.theme-crablox #logo-mark {
+    display: inline-block;
+    height: 2.1rem;
+    width: auto;
+}
+body.theme-crablox #logo-emoji { display: none; }
+body.theme-crablox .navbar .btn {
+    border-radius: 999px !important;
+    padding: .35rem .85rem;
+    font-weight: 600;
+    font-size: .9rem;
+}
+body.theme-crablox .navbar .btn-light {
+    background: var(--gold);
+    border: 1.5px solid var(--gold);
+    color: var(--navy);
+}
+body.theme-crablox .navbar .btn-light:hover { background: var(--gold-soft); }
+body.theme-crablox .navbar .btn-outline-light {
+    color: var(--gold);
+    border: 1.5px solid rgba(226, 193, 113, .55);
+}
+body.theme-crablox .navbar .btn-outline-light:hover {
+    background: var(--gold);
+    color: var(--navy);
+}
+body.theme-crablox .dropdown-menu {
+    background: var(--navy2);
+    border: 1px solid rgba(226, 193, 113, .4);
+}
+body.theme-crablox .dropdown-item { color: var(--ink); }
+body.theme-crablox .dropdown-item:hover { background: rgba(111, 240, 224, .1); color: var(--ink); }
+body.theme-crablox .dropdown-divider { border-color: rgba(226, 193, 113, .25); }
+
+/* --- Cards / panels ---------------------------------------------- */
+body.theme-crablox .card {
+    background: linear-gradient(155deg, var(--navy2), #162b4d);
+    border: 1.5px solid rgba(226, 193, 113, .4);
+    border-radius: 18px;
+    box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .6);
+}
+body.theme-crablox .card-header {
+    background: rgba(19, 40, 71, .55);
+    border-bottom: 1px solid rgba(226, 193, 113, .22);
+    color: var(--gold);
+    font-weight: 700;
+    letter-spacing: .3px;
+    border-radius: 18px 18px 0 0 !important;
+}
+
+/* --- Buttons ----------------------------------------------------- */
+body.theme-crablox .btn {
+    border-radius: 14px;
+    font-weight: 700;
+    letter-spacing: .2px;
+}
+body.theme-crablox .btn-primary,
+body.theme-crablox .btn-warning {
+    background: var(--gold);
+    border: 1.5px solid var(--gold);
+    color: var(--navy);
+}
+body.theme-crablox .btn-primary:hover,
+body.theme-crablox .btn-warning:hover { background: var(--gold-soft); border-color: var(--gold-soft); color: var(--navy); }
+body.theme-crablox .btn-outline-primary {
+    color: var(--gold);
+    border: 1.5px solid rgba(226, 193, 113, .6);
+    background: transparent;
+}
+body.theme-crablox .btn-outline-primary:hover { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+body.theme-crablox .btn-success { background: var(--moss); border: 1.5px solid var(--moss); color: var(--mint); }
+body.theme-crablox .btn-success:hover { filter: brightness(1.1); }
+body.theme-crablox .btn-danger { background: var(--danger); border: 1.5px solid var(--danger); color: #fff; }
+body.theme-crablox .btn-info { background: var(--teal); border: 1.5px solid var(--teal); color: var(--ink); }
+body.theme-crablox .btn-secondary { background: var(--violet); border: 1.5px solid var(--violet); color: var(--ink); }
+body.theme-crablox .btn-light { background: #eaf4f7; border: 1.5px solid #eaf4f7; color: var(--navy); }
+body.theme-crablox .btn-outline-light { color: var(--gold); border: 1.5px solid rgba(226, 193, 113, .55); }
+body.theme-crablox .btn-outline-light:hover { background: var(--gold); color: var(--navy); }
+
+/* --- Forms ------------------------------------------------------- */
+body.theme-crablox .form-control,
+body.theme-crablox .form-select,
+body.theme-crablox .form-check-input {
+    background-color: #162b4d;
+    border: 1.5px solid rgba(226, 193, 113, .35);
+    color: var(--ink);
+}
+body.theme-crablox .form-control:focus,
+body.theme-crablox .form-select:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 .2rem rgba(226, 193, 113, .18);
+    background-color: #162b4d;
+    color: var(--ink);
+}
+body.theme-crablox ::placeholder { color: #7f96a6; }
+body.theme-crablox .form-label { color: var(--ink); }
+
+/* --- Tables ------------------------------------------------------ */
+body.theme-crablox .table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--ink);
+    --bs-table-border-color: rgba(226, 193, 113, .22);
+    color: var(--ink);
+}
+body.theme-crablox .table thead th {
+    background: rgba(19, 40, 71, .75);
+    color: var(--gold);
+    border-bottom: 1px solid rgba(226, 193, 113, .3);
+}
+body.theme-crablox .table-striped > tbody > tr:nth-of-type(odd) > * {
+    --bs-table-bg-type: rgba(255, 255, 255, .03);
+    --bs-table-color-type: var(--ink);
+}
+
+/* --- Alerts / badges / progress ---------------------------------- */
+body.theme-crablox .alert {
+    background: rgba(19, 40, 71, .7);
+    border: 1.5px solid rgba(226, 193, 113, .35);
+    color: var(--ink);
+    border-radius: 14px;
+}
+body.theme-crablox .alert-success { border-color: rgba(111, 240, 224, .45); }
+body.theme-crablox .alert-danger { border-color: rgba(224, 138, 122, .5); }
+body.theme-crablox .alert-warning { border-color: rgba(226, 193, 113, .55); }
+body.theme-crablox .progress { background: rgba(255, 255, 255, .12); border-radius: 999px; }
+body.theme-crablox .progress-bar { background: linear-gradient(90deg, var(--teal), var(--mint)); }
+
+/* --- Upload zone ------------------------------------------------- */
+body.theme-crablox .upload-zone {
+    border: 1.5px dashed rgba(226, 193, 113, .55);
+    background: rgba(255, 255, 255, .03);
+    border-radius: 18px;
+}
+body.theme-crablox .upload-zone:hover { background: rgba(226, 193, 113, .08); border-color: var(--gold); }
+
+/* --- Modal / misc ------------------------------------------------ */
+body.theme-crablox .modal-content {
+    background: var(--navy2);
+    border: 1.5px solid rgba(226, 193, 113, .4);
+    color: var(--ink);
+}
+body.theme-crablox .page-link { background: #162b4d; border-color: rgba(226, 193, 113, .35); color: var(--ink); }
+body.theme-crablox .page-item.active .page-link { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+
+/* --- Homepage hero (redesign) ------------------------------------ */
+body.theme-crablox .home-hero { display: none; }
+body.theme-crablox .crablox-hero {
+    display: grid;
+    grid-template-columns: 1.15fr .85fr;
+    gap: 2.5rem;
+    align-items: center;
+    text-align: left;
+    margin: 1rem 0 2.5rem;
+}
+body.theme-crablox .crablox-word { width: min(100%, 26rem); height: auto; margin-bottom: 1.1rem; }
+body.theme-crablox .crablox-hero h1 { font-size: clamp(1.5rem, 3vw, 2.15rem); max-width: 24ch; }
+body.theme-crablox .crablox-hero .lede { color: #cfe0e8; max-width: 40rem; margin: 1rem 0 1.4rem; }
+body.theme-crablox .crablox-hero .cta { display: flex; flex-wrap: wrap; gap: .8rem; }
+body.theme-crablox .crablox-shield {
+    width: min(100%, 21rem);
+    height: auto;
+    justify-self: center;
+    filter: drop-shadow(0 0 26px rgba(111, 240, 224, .28));
+}
+@media (max-width: 860px) {
+    body.theme-crablox .crablox-hero { grid-template-columns: 1fr; }
+    body.theme-crablox .crablox-shield { order: -1; width: min(62%, 15rem); }
+}
+
+/* --- Homepage feature cards -------------------------------------- */
+body.theme-crablox .feature-card--train   { --accent: #296776; --accent-soft: #1f4d66; }
+body.theme-crablox .feature-card--predict { --accent: #55477c; --accent-soft: #3a3a6e; }
+body.theme-crablox .feature-card--plant   { --accent: #28624c; --accent-soft: #1f4d5a; }
+body.theme-crablox .feature-card--rank    { --accent: #e2c171; --accent-soft: #27406a; }
+
+body.theme-crablox [class*="feature-card--"] {
+    position: relative;
+    overflow: hidden;
+    border: 1.5px solid rgba(226, 193, 113, .55);
+    border-radius: 18px;
+    background: linear-gradient(155deg, var(--accent), var(--accent-soft));
+    box-shadow: 0 10px 26px -18px rgba(0, 0, 0, .7);
+}
+body.theme-crablox [class*="feature-card--"]::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    border: 1px solid rgba(226, 193, 113, .28);
+    border-radius: 13px;
+    pointer-events: none;
+}
+body.theme-crablox [class*="feature-card--"] > .card-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left !important;
+    position: relative;
+}
+body.theme-crablox [class*="feature-card--"] > .card-body > i.bi {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    font-size: 1.35rem !important;
+    color: var(--mint) !important;
+    background: rgba(19, 40, 71, .55);
+    border: 1px solid rgba(111, 240, 224, .35);
+}
+body.theme-crablox [class*="feature-card--"] h3 { color: var(--mint); font-size: 1.15rem; }
+body.theme-crablox [class*="feature-card--"] hr { display: none; }
+body.theme-crablox [class*="feature-card--"] > .card-body > div.small {
+    width: 100%;
+    background: rgba(19, 40, 71, .5);
+    border: 1px solid rgba(226, 193, 113, .25);
+    border-radius: 12px;
+    padding: .7rem .9rem;
+    margin-bottom: 1rem;
+    line-height: 1.9;
+}
+body.theme-crablox [class*="feature-card--"] > .card-body > div.small i { color: var(--mint) !important; }
+body.theme-crablox [class*="feature-card--"] > .card-body > .btn {
+    margin-top: auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45rem;
+    background: var(--gold);
+    border: 1.5px solid var(--gold);
+    color: var(--navy) !important;
+}
+
+/* --- Homepage stat tiles ----------------------------------------- */
+body.theme-crablox .stat-card {
+    position: relative;
+    overflow: hidden;
+    height: 100%;
+    background: linear-gradient(155deg, #1a3351, #162b4d);
+    border: 1.5px solid rgba(226, 193, 113, .45);
+    border-radius: 18px;
+}
+body.theme-crablox .stat-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--tile-accent, var(--gold));
+}
+body.theme-crablox .stat-card.blue   { --tile-accent: var(--teal); }
+body.theme-crablox .stat-card.green  { --tile-accent: var(--moss); }
+body.theme-crablox .stat-card.purple { --tile-accent: var(--violet); }
+body.theme-crablox .stat-card .num {
+    font-family: 'Unbounded', 'Hanken Grotesk', sans-serif;
+    font-size: 1.45rem;
+    color: var(--mint);
+}
+body.theme-crablox .stat-card .lbl {
+    color: var(--mut);
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    opacity: 1;
+}
+
+/* --- Footer ------------------------------------------------------ */
+body.theme-crablox .footer {
+    background: rgba(19, 40, 71, .75);
+    border-top: 1.5px solid rgba(226, 193, 113, .4);
+    color: var(--mut);
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    text-align: left;
+}
+body.theme-crablox .footer-mark {
+    display: block;
+    height: 2.6rem;
+    width: auto;
+}

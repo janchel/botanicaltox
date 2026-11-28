@@ -22,6 +22,11 @@ body {
     letter-spacing: -0.3px;
 }
 .navbar-brand i { margin-right: 8px; }
+#logo-mark { display: none; }
+
+/* Redesign hero / footer logo are only shown by the CRABLOX theme */
+.crablox-hero,
+.footer-mark { display: none; }
 
 .card {
     border: 1px solid var(--border);

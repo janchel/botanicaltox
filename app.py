@@ -2011,7 +2011,7 @@ def settings():
     return render_template("settings.html", models=model_info)
 
 
-VALID_THEMES = {"botanical", "mintjulep", "clinical"}
+VALID_THEMES = {"botanical", "mintjulep", "clinical", "crablox"}
 
 
 @app.route("/settings/theme", methods=["POST"])

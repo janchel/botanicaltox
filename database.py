@@ -54,7 +54,7 @@ def init_db():
             course TEXT DEFAULT '',
             bio TEXT DEFAULT '',
             avatar TEXT DEFAULT '',
-            theme TEXT DEFAULT 'clinical',
+            theme TEXT DEFAULT 'crablox',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -72,7 +72,7 @@ def init_db():
         if col not in cols:
             db.execute(ddl)
     if "theme" not in cols:
-        db.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'botanical'")
+        db.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'crablox'")
     # One-time backfill (guarded by PRAGMA user_version so it never runs
     # again): existing rows that never made an explicit choice adopt the
     # new Clinical default. Later deliberate picks are left untouched.
@@ -90,7 +90,7 @@ class User:
     def __init__(self, id: int, username: str, role: str = "user", approved: bool = True,
                  is_team: bool = False,
                  full_name: str = "", course: str = "", bio: str = "", avatar: str = "",
-                 theme: str = "botanical"):
+                 theme: str = "crablox"):
         self.id = id
         self.username = username
         self.role = role
@@ -100,7 +100,7 @@ class User:
         self.course = course or ""
         self.bio = bio or ""
         self.avatar = avatar or ""
-        self.theme = theme or "botanical"
+        self.theme = theme or "crablox"
 
     @property
     def is_authenticated(self):
@@ -160,12 +160,12 @@ class User:
 
     @staticmethod
     def create(username: str, password: str, role: str = "user", approved: bool = False,
-               theme: str = "clinical"):
+               theme: str = "crablox"):
         """Create a new user with hashed password.
 
         Regular self-registrations are created with approved=False (pending).
         Admin-created users pass approved=True. New accounts start on the
-        Clinical theme unless stated otherwise.
+        CRABLOX rebrand theme unless stated otherwise.
         """
         db = get_db()
         password_hash = generate_password_hash(password)
@@ -175,7 +175,7 @@ class User:
                 (username, password_hash, role, 1 if approved else 0, theme)
             )
             db.commit()
-            return User(cursor.lastrowid, username, role, approved)
+            return User(cursor.lastrowid, username, role, approved, theme=theme)
         except sqlite3.IntegrityError:
             raise ValueError("Username already exists")
 
@@ -263,7 +263,7 @@ class User:
 
     @staticmethod
     def set_theme(user_id: int, theme: str):
-        """Persist the user's UI theme preference ('botanical'|'mintjulep'|'clinical')."""
+        """Persist the user's UI theme preference ('botanical'|'mintjulep'|'clinical'|'crablox')."""
         db = get_db()
         db.execute("UPDATE users SET theme = ? WHERE id = ?", (theme, user_id))
         db.commit()

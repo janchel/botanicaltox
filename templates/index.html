@@ -2,7 +2,7 @@
 {% block title %}CRABLOX — Home{% endblock %}
 {% block content %}
 
-<div class="text-center mb-5 mt-4">
+<div class="text-center mb-5 mt-4 home-hero">
     <h1 class="fw-bold" style="font-size: 2.5rem;">
         <i class="bi bi-flower1-fill" style="color: var(--primary);"></i> CRABLOX
     </h1>
@@ -12,6 +12,23 @@
     <p class="text-muted">
         Upload compound data, train Random Forest models, and predict new molecules — all from your browser.
     </p>
+</div>
+
+<div class="crablox-hero">
+    <div>
+        <img class="crablox-word" src="{{ url_for('static', filename='img/wordmark-crablox.webp') }}" alt="CRABLOX">
+        <h1>Screen plant compounds against a hospital superbug</h1>
+        <p class="lede">
+            CRABLOX trains machine-learning models on molecule data. It predicts which compounds may
+            block the enzymes that make carbapenem-resistant <i>Acinetobacter baumannii</i> (CRAB)
+            resistant, flags likely liver toxicity, and ranks what to test in the lab first.
+        </p>
+        <div class="cta">
+            <a class="btn btn-primary" href="{{ url_for('predict') }}">Predict compounds</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('train') }}">Train a model</a>
+        </div>
+    </div>
+    <img class="crablox-shield" src="{{ url_for('static', filename='img/shield-crablox.webp') }}" alt="">
 </div>
 
 <div class="row g-4 justify-content-center">

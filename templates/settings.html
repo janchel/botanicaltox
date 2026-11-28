@@ -92,9 +92,10 @@
             {% for key, name, icon, desc, swatch in [
                 ('botanical', 'Botanical', 'bi-flower1', 'Default green plant theme', '#166534'),
                 ('mintjulep', 'Mint Julep', 'bi-flower2', 'Soft pink & sage green', '#d37897'),
-                ('clinical', 'Clinical', 'bi-heart-pulse', 'Medical EHR look — procedure-module cards', '#457359')
+                ('clinical', 'Clinical', 'bi-heart-pulse', 'Medical EHR look — procedure-module cards', '#457359'),
+                ('crablox', 'CRABLOX', 'bi-hexagon-fill', 'Default navy & gold rebrand with the CRABLOX logo', 'linear-gradient(135deg, #132847, #e2c171)')
             ] %}
-            <div class="col-6 col-md-4 col-lg-2">
+            <div class="col-6 col-md-4 col-lg-3">
                 <a href="#" class="d-block text-decoration-none theme-card theme-option"
                    data-theme="{{ key }}" style="border: 2px solid var(--border); border-radius: 10px; padding: 0.75rem; text-align: center; color: inherit;">
                     <div style="height: 42px; border-radius: 6px; background: {{ swatch }}; margin-bottom: 0.5rem;"></div>
