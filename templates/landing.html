@@ -22,6 +22,7 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:rg
 header .wrap{display:flex;align-items:center;gap:1.25rem;min-height:3.75rem}
 .brand{display:flex;align-items:center;gap:.6rem;text-decoration:none;font:700 1.05rem Unbounded,sans-serif;flex:none}
 .brand img{height:2.4rem;width:auto}
+.brand .brand-name{line-height:1;transform:translateY(.05em)}
 nav{display:flex;gap:.25rem;margin-left:auto;overflow-x:auto;scrollbar-width:none;align-items:center}
 nav a{padding:.45rem .8rem;border-radius:999px;text-decoration:none;font-weight:600;font-size:.95rem;white-space:nowrap;color:var(--mut)}
 nav a:hover{color:var(--ink);background:rgba(111,240,224,.1)}
@@ -106,7 +107,7 @@ footer strong{color:var(--ink)}
 </head>
 <body>
 <header><div class="wrap">
-<a class="brand" href="#top"><img src="{{ url_for('static', filename='img/logo-crablox.webp') }}" alt="">CRABLOX</a>
+<a class="brand" href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='img/logo-crablox.webp') }}" alt=""><span class="brand-name">CRABLOX</span></a>
 <nav aria-label="Main">
 <a href="{{ url_for('train') }}">Train</a><a href="{{ url_for('predict') }}">Predict</a><a href="{{ url_for('plant') }}">Plant</a><a href="{{ url_for('ranking') }}">Rank</a><a href="{{ url_for('team') }}">Team</a>{% if current_user.is_authenticated %}<a href="{{ url_for('settings') }}">Settings</a><a class="login" href="{{ url_for('logout') }}">Log out</a>{% else %}<a href="{{ url_for('register') }}">Register</a><a class="login" href="{{ url_for('login') }}">Log in</a>{% endif %}
 </nav></div></header>

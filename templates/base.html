@@ -14,15 +14,16 @@
          Logged-in users get their saved theme rendered server-side
          (no flash of wrong theme); visitors fall back to localStorage. -->
     {% set initial = current_user.theme if current_user.is_authenticated and current_user.theme in ('botanical', 'mintjulep', 'clinical', 'crablox') else 'crablox' %}
-    <link id="theme-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/theme-' ~ initial ~ '.css') }}?v=20260828e">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=20260828e">
+    <link id="theme-stylesheet" rel="stylesheet" href="{{ url_for('static', filename='css/theme-' ~ initial ~ '.css') }}?v=20260828f">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}?v=20260828f">
 </head>
 <body{% if initial in ('clinical', 'crablox') %} class="theme-{{ initial }}"{% endif %}>
     <nav class="navbar navbar-dark">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('index') }}">
-                <img id="logo-mark" src="{{ url_for('static', filename='img/logo-crablox.webp') }}" alt="CRABLOX">
-                <span id="logo-emoji">🧬</span> CRABLOX
+            <a class="navbar-brand" href="{{ url_for('index') }}" aria-label="CRABLOX home">
+                <img id="logo-mark" src="{{ url_for('static', filename='img/logo-crablox.webp') }}" alt="">
+                <span id="logo-emoji">🧬</span>
+                <span class="brand-name">CRABLOX</span>
             </a>
             <div class="d-flex gap-2 align-items-center flex-wrap">
                 <!-- Feature links — always visible; protected routes prompt login -->
@@ -129,7 +130,7 @@
 
             function applyTheme(theme) {
                 if (!['botanical', 'mintjulep', 'clinical', 'crablox'].includes(theme)) theme = 'crablox';
-                link.setAttribute('href', '{{ url_for("static", filename="css/") }}theme-' + theme + '.css?v=20260828e');
+                link.setAttribute('href', '{{ url_for("static", filename="css/") }}theme-' + theme + '.css?v=20260828f');
                 localStorage.setItem(THEME_KEY, theme);
                 options.forEach(function(opt) {
                     opt.classList.toggle('active', opt.dataset.theme === theme);
